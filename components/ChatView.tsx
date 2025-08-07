@@ -34,8 +34,8 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode }) => {
     setInitialPrompt({ key: Date.now(), text: prompt });
   }, []);
 
-  const handleSendMessage = useCallback(async (prompt: string, image: ImageData | null) => {
-    if (!activeSession || (!prompt && !image)) return;
+  const handleSendMessage = useCallback(async (prompt: string, images: ImageData[]) => {
+    if (!activeSession || (!prompt && (!images || images.length === 0))) return;
     
     abortControllerRef.current = new AbortController();
     setIsLoading(true);
@@ -44,14 +44,14 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode }) => {
       id: `msg_${Date.now()}`,
       role: 'user',
       content: prompt,
-      ...(image && { image: `data:${image.mimeType};base64,${image.data}` }),
+      ...(images && images.length > 0 && { images: images.map(img => `data:${img.mimeType};base64,${img.data}`) }),
     };
 
     const assistantMessageId = `msg_${Date.now() + 1}`;
     const assistantMessage: ChatMessage = {
       id: assistantMessageId,
       role: 'assistant',
-      content: '', // Will be populated with AnalysisResult object or string
+      content: '',
     };
     
     const messagesWithUser = [...activeSession.messages, userMessage];
@@ -63,7 +63,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode }) => {
 
     let fullResponseText = '';
     try {
-        const stream = analyzeChartStream(activeSession.messages, prompt, image, abortControllerRef.current.signal, isUltraMode);
+        const stream = analyzeChartStream(activeSession.messages, prompt, images, abortControllerRef.current.signal, isUltraMode);
         for await (const chunk of stream) {
             if (abortControllerRef.current?.signal.aborted) break;
             fullResponseText += chunk;
@@ -86,14 +86,14 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode }) => {
         let finalContent: MessageContent;
         let thinkingText = '';
 
-        if (image) { // We were analyzing an image, expect JSON
+        if (images && images.length > 0) { // We were analyzing images, expect JSON
             try {
                 const parsedJson = JSON.parse(fullResponseText);
                 if (parsedJson.error) {
                     finalContent = `Error: ${parsedJson.error}`;
                 } else {
                     finalContent = parsedJson as AnalysisResult;
-                    thinkingText = finalContent.thinkingProcess;
+                    thinkingText = (finalContent as AnalysisResult).thinkingProcess;
                 }
             } catch (e) {
                 console.error("Failed to parse JSON response:", e, "Raw response:", fullResponseText);
@@ -112,7 +112,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode }) => {
 
         if (activeSession.title === 'New Analysis') {
             const newTitle = (typeof finalContent === 'object' && 'summary' in finalContent)
-                ? finalContent.summary.substring(0, 40) + '...'
+                ? (finalContent as AnalysisResult).summary.substring(0, 40) + '...'
                 : prompt.substring(0, 40) + '...';
             updateSessionTitle(activeSession.id, newTitle);
         }
@@ -149,13 +149,22 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode }) => {
     const historyForStream = activeSession.messages.slice(0, lastAssistantMessageIndex - 1);
 
     const prompt = typeof lastUserMessage.content === 'string' ? lastUserMessage.content : '';
-    let image: ImageData | null = null;
-    if (lastUserMessage.image) {
-        const parts = lastUserMessage.image.split(';base64,');
+    let images: ImageData[] = [];
+
+    // Reconstruct images from last user message, supporting legacy single image
+    const imageUrls: string[] = [];
+    if (Array.isArray((lastUserMessage as any).images) && (lastUserMessage as any).images.length > 0) {
+        imageUrls.push(...((lastUserMessage as any).images as string[]));
+    } else if ((lastUserMessage as any).image) {
+        imageUrls.push((lastUserMessage as any).image as string);
+    }
+
+    for (const url of imageUrls) {
+        const parts = url.split(';base64,');
         if (parts.length === 2) {
             const mimeType = parts[0].split(':')[1];
             const data = parts[1];
-            image = { mimeType, data };
+            images.push({ mimeType, data });
         }
     }
 
@@ -171,7 +180,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode }) => {
 
     let fullResponseText = '';
     try {
-        const stream = analyzeChartStream(historyForStream, prompt, image, abortControllerRef.current.signal, isUltraMode);
+        const stream = analyzeChartStream(historyForStream, prompt, images, abortControllerRef.current.signal, isUltraMode);
         for await (const chunk of stream) {
             if (abortControllerRef.current?.signal.aborted) break;
             fullResponseText += chunk;
@@ -194,14 +203,14 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode }) => {
         let finalContent: MessageContent;
         let thinkingText = '';
 
-        if (image) { // We were analyzing an image, expect JSON
+        if (images && images.length > 0) { // We were analyzing images, expect JSON
             try {
                 const parsedJson = JSON.parse(fullResponseText);
                 if (parsedJson.error) {
                     finalContent = `Error: ${parsedJson.error}`;
                 } else {
                     finalContent = parsedJson as AnalysisResult;
-                    thinkingText = finalContent.thinkingProcess;
+                    thinkingText = (finalContent as AnalysisResult).thinkingProcess;
                 }
             } catch (e) {
                 console.error("Failed to parse JSON response:", e, "Raw response:", fullResponseText);
@@ -234,7 +243,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode }) => {
         setIsLoading(false);
         abortControllerRef.current = null;
     }
-}, [activeSession, updateSession, isLoading, isUltraMode]);
+  }, [activeSession, updateSession, isLoading, isUltraMode]);
 
 
   if (!activeSession) return null; // Should be handled by parent, but good practice

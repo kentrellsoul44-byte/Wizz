@@ -123,7 +123,7 @@ const CONVERSATIONAL_SYSTEM_INSTRUCTION = `You are Wizz, an expert AI assistant 
 const CONVERSATIONAL_SYSTEM_INSTRUCTION_ULTRA = `You are Wizz Ultra, a world-class quantitative crypto analyst AI. Your knowledge is vast and precise. When a user asks a question without a chart, answer it with institutional-grade insight and clarity. If they ask for analysis, politely guide them to upload a chart to unlock your full capabilities. Be direct, insightful, and confident. Your answers should be formatted in Markdown.`;
 
 
-export async function* analyzeChartStream(history: ChatMessage[], prompt: string, image: ImageData | null, signal: AbortSignal, isUltraMode: boolean): AsyncGenerator<string> {
+export async function* analyzeChartStream(history: ChatMessage[], prompt: string, images: ImageData[], signal: AbortSignal, isUltraMode: boolean): AsyncGenerator<string> {
     const turnBasedHistory = history
         .filter(msg => msg.role === 'user' || (msg.role === 'assistant' && msg.rawResponse))
         .map(msg => {
@@ -138,8 +138,17 @@ export async function* analyzeChartStream(history: ChatMessage[], prompt: string
             if (typeof msg.content === 'string' && msg.content.trim()) {
                 userParts.push({ text: msg.content });
             }
-            if (msg.image) {
-                const imgParts = msg.image.split(';base64,');
+
+            // Support both legacy single image and new multiple images
+            const imageUrls: string[] = [];
+            if (Array.isArray(msg.images) && msg.images.length > 0) {
+                imageUrls.push(...msg.images);
+            } else if ((msg as any).image) {
+                imageUrls.push((msg as any).image as string);
+            }
+
+            for (const url of imageUrls) {
+                const imgParts = url.split(';base64,');
                 if (imgParts.length === 2) {
                     const mimeType = imgParts[0].split(':')[1];
                     const data = imgParts[1];
@@ -161,13 +170,15 @@ export async function* analyzeChartStream(history: ChatMessage[], prompt: string
     }).filter(turn => turn.parts.length > 0);
 
     const currentUserParts: any[] = [{ text: prompt }];
-    if (image) {
-        currentUserParts.push({
-            inlineData: {
-                mimeType: image.mimeType,
-                data: image.data,
-            },
-        });
+    if (Array.isArray(images) && images.length > 0) {
+        for (const img of images) {
+            currentUserParts.push({
+                inlineData: {
+                    mimeType: img.mimeType,
+                    data: img.data,
+                },
+            });
+        }
     }
 
     const contents = [
@@ -175,7 +186,9 @@ export async function* analyzeChartStream(history: ChatMessage[], prompt: string
         { role: 'user', parts: currentUserParts }
     ];
 
-    const modelConfig = image
+    const hasImages = Array.isArray(images) && images.length > 0;
+
+    const modelConfig = hasImages
         ? { // Analysis config for chart images
             systemInstruction: isUltraMode ? ULTRA_SYSTEM_INSTRUCTION : SYSTEM_INSTRUCTION,
             temperature: 0,
@@ -192,7 +205,7 @@ export async function* analyzeChartStream(history: ChatMessage[], prompt: string
         const responseStream = await ai.models.generateContentStream({
             model: 'gemini-2.5-flash',
             contents: contents,
-            config: modelConfig as any, // Cast as any to handle the two different config shapes
+            config: modelConfig as any,
         });
         
         for await (const chunk of responseStream) {
@@ -205,13 +218,13 @@ export async function* analyzeChartStream(history: ChatMessage[], prompt: string
 
     } catch (error) {
         if (!(error instanceof Error && error.name === 'AbortError')) {
-          console.error("Error during Gemini stream:", error);
-          const errorMessage = `Details: ${error instanceof Error ? error.message : String(error)}`;
-          if (image) {
-            yield `{"error": "Could not retrieve analysis. ${errorMessage}"}`;
-          } else {
-            yield `Sorry, I encountered an error and could not respond. Please try again. ${errorMessage}`;
-          }
+            console.error("Error during Gemini stream:", error);
+            const errorMessage = `Details: ${error instanceof Error ? error.message : String(error)}`;
+            if (hasImages) {
+                yield `{"error": "Could not retrieve analysis. ${errorMessage}"}`;
+            } else {
+                yield `Sorry, I encountered an error and could not respond. Please try again. ${errorMessage}`;
+            }
         }
     }
 }

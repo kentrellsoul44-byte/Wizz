@@ -30,7 +30,8 @@ export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
   content: MessageContent;
-  image?: string; // base64 data URL
+  image?: string; // base64 data URL (deprecated; use images[] instead)
+  images?: string[]; // array of base64 data URLs
   thinkingText?: string; // The markdown thinking process text
   rawResponse?: string; // Full raw text from model for history
 }
