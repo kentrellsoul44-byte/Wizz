@@ -183,3 +183,31 @@ export const deleteAllUserSessions = async (userId: string) => {
         throw error;
     }
 }
+
+// --- Storage: Avatar Upload ---
+
+/**
+ * Uploads a user's avatar image to Supabase Storage ('avatars' bucket) and returns a public URL.
+ * Expects RLS and bucket policies to allow the authenticated user to upload to 'avatars'.
+ */
+export const uploadAvatar = async (userId: string, file: Blob): Promise<string> => {
+  if (!supabaseReady) throw supabaseNotConfiguredError;
+  const fileExt = 'jpg';
+  const filePath = `${userId}/${Date.now()}.${fileExt}`;
+
+  const { error: uploadError } = await supabase.storage.from('avatars').upload(filePath, file, {
+    contentType: 'image/jpeg',
+    upsert: true,
+  });
+
+  if (uploadError) {
+    console.error('Error uploading avatar:', uploadError);
+    throw uploadError;
+  }
+
+  const { data } = supabase.storage.from('avatars').getPublicUrl(filePath);
+  if (!data || !data.publicUrl) {
+    throw new Error('Failed to get public URL for uploaded avatar');
+  }
+  return data.publicUrl;
+};

@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { User } from '../types';
 import type { UserPreferences } from '../services/supabaseService';
+import * as db from '../services/supabaseService';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -25,6 +26,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
 
   const [name, setName] = useState(user.user_metadata?.name || user.user_metadata?.full_name || '');
   const [avatarUrl, setAvatarUrl] = useState(user.user_metadata?.avatar_url || '');
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [profileMessage, setProfileMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
 
@@ -38,18 +41,59 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
       // Reset form fields when modal is opened
       setName(user.user_metadata?.name || user.user_metadata?.full_name || '');
       setAvatarUrl(user.user_metadata?.avatar_url || '');
+      setAvatarFile(null);
+      setAvatarPreview(null);
       setProfileMessage(null);
       document.addEventListener('keydown', handleEsc);
     }
     return () => document.removeEventListener('keydown', handleEsc);
   }, [isOpen, onClose, user]);
 
+  const handleAvatarFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !file.type.startsWith('image/')) return;
+    setAvatarFile(file);
+    const reader = new FileReader();
+    reader.onloadend = () => setAvatarPreview(reader.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  // Crop image to centered square and export to JPEG blob
+  const cropToSquare = (image: HTMLImageElement, size = 256): HTMLCanvasElement => {
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d')!;
+    const minSide = Math.min(image.naturalWidth, image.naturalHeight);
+    const sx = (image.naturalWidth - minSide) / 2;
+    const sy = (image.naturalHeight - minSide) / 2;
+    ctx.drawImage(image, sx, sy, minSide, minSide, 0, 0, size, size);
+    return canvas;
+  };
+
   const handleProfileUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSavingProfile(true);
     setProfileMessage(null);
     try {
-      await onUpdateProfile({ name: name, avatar_url: avatarUrl });
+      let finalAvatarUrl = avatarUrl;
+      if (avatarFile) {
+        // Create cropped square and upload
+        const img = new Image();
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          img.onload = () => {
+            const canvas = cropToSquare(img, 256);
+            resolve(canvas.toDataURL('image/jpeg', 0.9));
+          };
+          img.onerror = reject;
+          img.src = avatarPreview || '';
+        });
+        const blob = await (await fetch(dataUrl)).blob();
+        const publicUrl = await db.uploadAvatar(user.id, blob);
+        finalAvatarUrl = publicUrl;
+        setAvatarUrl(publicUrl);
+      }
+      await onUpdateProfile({ name: name, avatar_url: finalAvatarUrl });
       setProfileMessage({type: 'success', text: 'Profile saved successfully!'});
     } catch (error) {
       setProfileMessage({type: 'error', text: 'Failed to save profile. Please try again.'});
@@ -90,6 +134,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
           <form onSubmit={handleProfileUpdate}>
             <h3 className="font-medium text-text-primary mb-3">Profile</h3>
             <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-1">Avatar</label>
+                <div className="flex items-center gap-4">
+                  <div className="h-16 w-16 rounded-full bg-border-color overflow-hidden flex items-center justify-center">
+                    {avatarPreview ? (
+                      <img src={avatarPreview} alt="New avatar preview" className="h-16 w-16 object-cover" />
+                    ) : avatarUrl ? (
+                      <img src={avatarUrl} alt="Avatar" className="h-16 w-16 object-cover" />
+                    ) : (
+                      <span className="text-text-primary">{(user.user_metadata?.name || user.email || '?')[0]?.toUpperCase()}</span>
+                    )}
+                  </div>
+                  <div>
+                    <input type="file" accept="image/*" onChange={handleAvatarFileChange} />
+                    <p className="text-xs text-text-secondary">Upload an image, it will be auto-cropped to a square.</p>
+                  </div>
+                </div>
+              </div>
               <div>
                 <label htmlFor="display-name" className="block text-sm font-medium text-text-secondary mb-1">Display Name</label>
                 <input

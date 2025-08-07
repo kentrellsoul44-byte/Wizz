@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import type { Session, User } from '../types';
 import { PlusIcon } from './icons/PlusIcon';
 import { UserProfile } from './UserProfile';
@@ -146,10 +146,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onLogout,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [debounced, setDebounced] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(searchTerm.trim().toLowerCase()), 200);
+    return () => clearTimeout(t);
+  }, [searchTerm]);
 
-  const filteredSessions = sessions.filter(session => 
-    session.title.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredSessions = useMemo(() => {
+    if (!debounced) return sessions;
+    return sessions.filter(session => {
+      if (session.title.toLowerCase().includes(debounced)) return true;
+      // Check messages content
+      for (const m of session.messages) {
+        if (typeof m.content === 'string') {
+          if (m.content.toLowerCase().includes(debounced)) return true;
+        } else if (m.content && typeof m.content === 'object') {
+          const obj = m.content as any;
+          // Search in known fields of AnalysisResult
+          const fields = [obj.summary, obj.thinkingProcess, obj.verificationSummary, obj.signal, obj.confidence, obj.riskRewardRatio, obj.timeframe];
+          if (fields.some((f: unknown) => typeof f === 'string' && f.toLowerCase().includes(debounced))) return true;
+        }
+      }
+      return false;
+    });
+  }, [debounced, sessions]);
 
   return (
     <aside
