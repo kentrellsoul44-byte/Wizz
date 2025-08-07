@@ -1,0 +1,6 @@
+{
+  "name": "Wizz: AI Crypto Chart Analyzer",
+  "description": "An AI-powered application to analyze cryptocurrency charts. Upload a chart image or describe it to receive a technical summary and a potential trade signal (entry price, take profit, and stop loss) when the AI has high confidence.",
+  "requestFramePermissions": [],
+  "prompt": ""
+}
