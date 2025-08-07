@@ -166,13 +166,21 @@ export const Message: React.FC<MessageProps> = React.memo(({ message, isLastMess
     const { content, thinkingText } = message;
 
     if (isUser) {
+        const imageUrls: string[] = [];
+        if (Array.isArray((message as any).images) && (message as any).images.length > 0) {
+            imageUrls.push(...((message as any).images as string[]));
+        } else if ((message as any).image) {
+            imageUrls.push((message as any).image as string);
+        }
         return (
             <div className="flex items-start gap-4 justify-end">
                 <div className="flex-1 max-w-2xl bg-accent-blue rounded-lg p-3 text-white">
                     {typeof content === 'string' && content && <p className="whitespace-pre-wrap">{content}</p>}
-                    {message.image && (
-                        <div className="mt-2">
-                            <img src={message.image} alt="User upload" className="max-w-xs max-h-64 rounded-md border border-blue-400" />
+                    {imageUrls.length > 0 && (
+                        <div className="mt-2 grid grid-cols-2 md:grid-cols-3 gap-2">
+                            {imageUrls.map((url, idx) => (
+                                <img key={idx} src={url} alt={`User upload ${idx+1}`} className="max-w-xs max-h-64 rounded-md border border-blue-400" />
+                            ))}
                         </div>
                     )}
                 </div>
