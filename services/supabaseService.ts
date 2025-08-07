@@ -40,11 +40,16 @@ export const getUserPreferences = async (userId: string): Promise<UserPreference
   // This "upsert" with "ignoreDuplicates" acts as an atomic "INSERT ... ON CONFLICT DO NOTHING".
   // It ensures that a preference row exists for the user without causing errors if one is created
   // by a concurrent request. It uses the default preferences for the initial creation.
+  // Avoid sending columns that may not exist in the DB schema (e.g., default_ultra_mode) on initial upsert.
+  const initialPayload: { user_id: string; theme: 'light' | 'dark' } = {
+    user_id: userId,
+    theme: defaultPreferences.theme,
+  };
   const { error: upsertError } = await supabase
     .from('user_preferences')
-    .upsert({ user_id: userId, ...defaultPreferences }, { 
-      onConflict: 'user_id', 
-      ignoreDuplicates: true 
+    .upsert(initialPayload, {
+      onConflict: 'user_id',
+      ignoreDuplicates: true,
     });
 
   if (upsertError) {
@@ -55,11 +60,30 @@ export const getUserPreferences = async (userId: string): Promise<UserPreference
   
   // Now, fetch the user's preferences. We use single() because after the upsert,
   // a row should exist (unless the upsert failed due to a policy and no row existed before).
-  const { data, error: selectError } = await supabase
+  let select = supabase
     .from('user_preferences')
     .select('theme, default_ultra_mode')
     .eq('user_id', userId)
     .single();
+
+  let { data, error: selectError } = await select;
+
+  // If the column doesn't exist (42703), retry without it and fall back to default.
+  if (selectError && (selectError as any).code === '42703') {
+    const retry = await supabase
+      .from('user_preferences')
+      .select('theme')
+      .eq('user_id', userId)
+      .single();
+    if (retry.error) {
+      console.error('Error fetching preferences:', retry.error);
+      return { ...defaultPreferences };
+    }
+    return {
+      theme: retry.data.theme === 'light' ? 'light' : 'dark',
+      default_ultra_mode: false,
+    };
+  }
 
   if (selectError) {
     // This is the critical error. If we can't read the preferences, we must fall back to defaults.
@@ -68,16 +92,40 @@ export const getUserPreferences = async (userId: string): Promise<UserPreference
   }
 
   return {
-    theme: data.theme === 'light' ? 'light' : 'dark',
-    default_ultra_mode: data.default_ultra_mode ?? false,
+    theme: data!.theme === 'light' ? 'light' : 'dark',
+    default_ultra_mode: (data as any).default_ultra_mode ?? false,
   };
 };
 
 export const updateUserPreferences = async (userId: string, prefs: Partial<UserPreferences>) => {
   if (!supabaseReady) throw supabaseNotConfiguredError;
-  const { error } = await supabase
+
+  // Build payload only with known, supported columns
+  const payload: { user_id: string; theme?: 'light' | 'dark'; default_ultra_mode?: boolean } = {
+    user_id: userId,
+  };
+  if (typeof prefs.theme !== 'undefined') payload.theme = prefs.theme;
+  if (typeof prefs.default_ultra_mode !== 'undefined') payload.default_ultra_mode = prefs.default_ultra_mode;
+
+  let { error } = await supabase
     .from('user_preferences')
-    .upsert({ user_id: userId, ...prefs }, { onConflict: 'user_id' });
+    .upsert(payload, { onConflict: 'user_id' });
+
+  // If the DB doesn't have default_ultra_mode, retry without that column
+  if (error && (error as any).code === '42703' && 'default_ultra_mode' in payload) {
+    const retryPayload: { user_id: string; theme?: 'light' | 'dark' } = {
+      user_id: userId,
+      ...(typeof payload.theme !== 'undefined' ? { theme: payload.theme } : {}),
+    };
+    const retry = await supabase
+      .from('user_preferences')
+      .upsert(retryPayload, { onConflict: 'user_id' });
+    if (retry.error) {
+      console.error('Error updating preferences:', retry.error);
+      throw retry.error;
+    }
+    return;
+  }
   
   if (error) {
     console.error('Error updating preferences:', error);
@@ -113,7 +161,7 @@ export const createSession = async (userId: string, sessionData: Pick<Session, '
   if (!supabaseReady) throw supabaseNotConfiguredError;
   const { data, error } = await supabase
     .from('sessions')
-    .insert([{
+    .insert([{ 
       user_id: userId,
       title: sessionData.title,
       messages: sessionData.messages as unknown as Json,
@@ -206,8 +254,5 @@ export const uploadAvatar = async (userId: string, file: Blob): Promise<string> 
   }
 
   const { data } = supabase.storage.from('avatars').getPublicUrl(filePath);
-  if (!data || !data.publicUrl) {
-    throw new Error('Failed to get public URL for uploaded avatar');
-  }
   return data.publicUrl;
 };
