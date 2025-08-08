@@ -7,6 +7,7 @@ import { useSession } from '../contexts/SessionContext';
 import { EmptyChat } from './EmptyChat';
 import { buildCacheKey } from '../services/determinismService';
 import { getCache, setCache } from '../services/cacheService';
+import { applyPostProcessingGates } from '../services/postProcessingService';
 
 interface ChatViewProps {
     defaultUltraMode: boolean;
@@ -124,14 +125,15 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode }) => {
                 if (parsedJson.error) {
                     finalContent = `Error: ${parsedJson.error}`;
                 } else {
-                    finalContent = parsedJson as AnalysisResult;
-                    thinkingText = (finalContent as AnalysisResult).thinkingProcess;
+                    const gated = applyPostProcessingGates(parsedJson as AnalysisResult, isUltraMode);
+                    finalContent = gated as AnalysisResult;
+                    thinkingText = gated.thinkingProcess;
                     // cache exact duplicate image hashes
                     if (imageHashes.length > 0) {
                       setCache(cacheKey, {
-                        signal: (finalContent as AnalysisResult).signal,
-                        confidence: ((finalContent as AnalysisResult).overallConfidenceScore ?? 50) / 100,
-                        raw: fullResponseText,
+                        signal: gated.signal,
+                        confidence: ((gated.overallConfidenceScore ?? 50) / 100),
+                        raw: JSON.stringify(gated),
                         modelVersion,
                         promptVersion,
                         imageHashes,
@@ -276,13 +278,14 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode }) => {
                 if (parsedJson.error) {
                     finalContent = `Error: ${parsedJson.error}`;
                 } else {
-                    finalContent = parsedJson as AnalysisResult;
-                    thinkingText = (finalContent as AnalysisResult).thinkingProcess;
+                    const gated = applyPostProcessingGates(parsedJson as AnalysisResult, isUltraMode);
+                    finalContent = gated as AnalysisResult;
+                    thinkingText = gated.thinkingProcess;
                     if (imageHashes && imageHashes.length > 0) {
                       setCache(cacheKey, {
-                        signal: (finalContent as AnalysisResult).signal,
-                        confidence: ((finalContent as AnalysisResult).overallConfidenceScore ?? 50) / 100,
-                        raw: fullResponseText,
+                        signal: gated.signal,
+                        confidence: ((gated.overallConfidenceScore ?? 50) / 100),
+                        raw: JSON.stringify(gated),
                         modelVersion,
                         promptVersion,
                         imageHashes,
