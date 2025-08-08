@@ -363,6 +363,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode }) => {
                 const prompt = `Analyze this live ${liveSymbol} chart on interval ${liveInterval}.`;
                 await handleSendMessage(prompt, [image]);
               }}
+              onAutoFit={() => liveChartRef.current?.autoFit()}
             />
           </div>
         </>
