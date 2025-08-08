@@ -7,7 +7,7 @@ import { useSession } from '../contexts/SessionContext';
 import { EmptyChat } from './EmptyChat';
 import { buildCacheKey } from '../services/determinismService';
 import { getCache, setCache } from '../services/cacheService';
-import { LiveChart } from './LiveChart';
+import { LiveChart, LiveChartHandle } from './LiveChart';
 import { LiveChartControls } from './LiveChartControls';
 import type { Interval } from '../services/marketDataService';
 
@@ -24,6 +24,8 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode }) => {
   const [liveSymbol, setLiveSymbol] = useState('BTCUSDT');
   const [liveInterval, setLiveInterval] = useState<Interval>('1m');
   const [isLivePaused, setIsLivePaused] = useState(false);
+  const [liveRefreshToken, setLiveRefreshToken] = useState(0);
+  const liveChartRef = useRef<LiveChartHandle | null>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -340,7 +342,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode }) => {
         <>
           <div className="flex-1 overflow-hidden p-6">
             <div className="w-full h-full rounded-lg border border-border-color">
-              <LiveChart symbol={liveSymbol} interval={liveInterval} isPaused={isLivePaused} />
+              <LiveChart ref={liveChartRef as any} symbol={liveSymbol} interval={liveInterval} isPaused={isLivePaused} refreshToken={liveRefreshToken} />
             </div>
           </div>
           <div className="px-6 pb-4 bg-chat-bg">
@@ -352,6 +354,15 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode }) => {
               isPaused={isLivePaused}
               onTogglePaused={() => setIsLivePaused((p) => !p)}
               onCloseLiveChart={() => setIsLiveChartActive(false)}
+              onApply={() => setLiveRefreshToken((n) => n + 1)}
+              onAnalyze={async () => {
+                // Capture PNG and analyze via existing flow
+                const pngBase64 = liveChartRef.current?.capturePng();
+                if (!pngBase64 || isLoading || !activeSession) return;
+                const image: ImageData = { mimeType: 'image/png', data: pngBase64 };
+                const prompt = `Analyze this live ${liveSymbol} chart on interval ${liveInterval}.`;
+                await handleSendMessage(prompt, [image]);
+              }}
             />
           </div>
         </>

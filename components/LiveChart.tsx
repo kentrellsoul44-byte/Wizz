@@ -1,11 +1,16 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { createChart, ColorType, IChartApi, UTCTimestamp, CandlestickSeriesPartialOptions, Time } from 'lightweight-charts';
-import { CandlestickBar, Interval, fetchHistoricalKlines, openKlineWebSocket } from '../services/marketDataService';
+import React, { useEffect, useMemo, useRef, useState, useImperativeHandle, forwardRef } from 'react';
+import { createChart, ColorType, IChartApi, CandlestickSeriesPartialOptions } from 'lightweight-charts';
+import { fetchHistoricalKlines, openKlineWebSocket, Interval } from '../services/marketDataService';
 
 export interface LiveChartProps {
   symbol: string;
   interval: Interval;
   isPaused: boolean;
+  refreshToken?: number;
+}
+
+export interface LiveChartHandle {
+  capturePng: () => string | null; // base64 without data URL prefix
 }
 
 function detectTheme(): 'light' | 'dark' {
@@ -13,13 +18,31 @@ function detectTheme(): 'light' | 'dark' {
   return root.classList.contains('dark') ? 'dark' : 'light';
 }
 
-export const LiveChart: React.FC<LiveChartProps> = ({ symbol, interval, isPaused }) => {
+export const LiveChart = forwardRef<LiveChartHandle, LiveChartProps>(({ symbol, interval, isPaused, refreshToken = 0 }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ReturnType<IChartApi['addCandlestickSeries']> | null>(null);
   const [theme, setTheme] = useState<'light' | 'dark'>(detectTheme());
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorText, setErrorText] = useState<string | null>(null);
 
-  // Observe theme class changes
+  useImperativeHandle(ref, () => ({
+    capturePng: () => {
+      const container = containerRef.current;
+      if (!container) return null;
+      const canvas = container.querySelector('canvas');
+      if (!canvas) return null;
+      try {
+        const dataUrl = (canvas as HTMLCanvasElement).toDataURL('image/png');
+        const prefix = 'data:image/png;base64,';
+        return dataUrl.startsWith(prefix) ? dataUrl.slice(prefix.length) : null;
+      } catch {
+        return null;
+      }
+    },
+  }), []);
+
+  // Observe theme changes
   useEffect(() => {
     const observer = new MutationObserver(() => setTheme(detectTheme()));
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
@@ -87,7 +110,7 @@ export const LiveChart: React.FC<LiveChartProps> = ({ symbol, interval, isPaused
     chartRef.current = chart;
     seriesRef.current = series;
 
-    const handleResize = () => chart.applyOptions({ width: containerRef.current?.clientWidth ?? 300 });
+    const handleResize = () => chart.applyOptions({ width: containerRef.current?.clientWidth ?? 300, height: containerRef.current?.clientHeight ?? 300 });
     handleResize();
     window.addEventListener('resize', handleResize);
 
@@ -117,51 +140,70 @@ export const LiveChart: React.FC<LiveChartProps> = ({ symbol, interval, isPaused
     } as CandlestickSeriesPartialOptions);
   }, [chartColors]);
 
-  // Load data + stream
+  // Load data + stream, re-run on symbol/interval/pause/refresh
   useEffect(() => {
     let socketCloser: (() => void) | null = null;
     let isDisposed = false;
+    let reconnectAttempts = 0;
 
-    async function run() {
+    async function loadHistory() {
       if (!seriesRef.current || !chartRef.current) return;
-      const series = seriesRef.current;
-
-      // Load history
+      setIsLoading(true);
+      setErrorText(null);
       try {
         const history = await fetchHistoricalKlines({ symbol, interval, limit: 500 });
         if (isDisposed) return;
-        series.setData(history as any);
-        chartRef.current?.timeScale().fitContent();
-      } catch (e) {
-        // non-blocking
+        seriesRef.current.setData(history as any);
+        chartRef.current.timeScale().fitContent();
+      } catch (e: any) {
+        if (!isDisposed) setErrorText('Failed to load historical data');
+      } finally {
+        if (!isDisposed) setIsLoading(false);
       }
+    }
 
-      if (isPaused) return;
-
-      // Stream updates
+    function connectSocket() {
+      if (isPaused) return; // do not open while paused
       const socket = openKlineWebSocket({
         symbol,
         interval,
-        onKline: (bar, isClosed) => {
+        onKline: (bar) => {
           if (!seriesRef.current) return;
-          // For in-progress candles, update last bar; when closed, still just setBar as same time will overwrite then a new one will arrive on next candle
           seriesRef.current.update(bar as any);
+        },
+        onClose: () => {
+          if (isDisposed) return;
+          // simple backoff up to 5s
+          reconnectAttempts += 1;
+          const delay = Math.min(5000, 500 * reconnectAttempts);
+          setTimeout(() => {
+            if (!isDisposed && !isPaused) connectSocket();
+          }, delay);
         },
       });
       socketCloser = socket.close;
     }
 
-    run();
+    // run
+    loadHistory().then(() => connectSocket());
 
     return () => {
       isDisposed = true;
       if (socketCloser) socketCloser();
     };
-  }, [symbol, interval, isPaused]);
+  }, [symbol, interval, isPaused, refreshToken]);
 
   return (
-    <div className="w-full h-full">
+    <div className="relative w-full h-full">
       <div ref={containerRef} className="w-full h-full" />
+      {isLoading && (
+        <div className="absolute top-2 left-2 px-2 py-1 text-xs rounded bg-sidebar-bg border border-border-color text-text-secondary">Loading…</div>
+      )}
+      {errorText && (
+        <div className="absolute top-2 right-2 px-2 py-1 text-xs rounded bg-accent-red text-white">{errorText}</div>
+      )}
     </div>
   );
-};
+});
+
+LiveChart.displayName = 'LiveChart';
