@@ -32,6 +32,7 @@ export interface ChatMessage {
   content: MessageContent;
   image?: string; // base64 data URL (deprecated; use images[] instead)
   images?: string[]; // array of base64 data URLs
+  imageHashes?: string[]; // hashes for corresponding images (optional)
   thinkingText?: string; // The markdown thinking process text
   rawResponse?: string; // Full raw text from model for history
 }
@@ -48,6 +49,7 @@ export interface Session {
 export interface ImageData {
     mimeType: string;
     data: string; // base64 encoded string without prefix
+    hash?: string; // optional SHA-256 hash of the canonicalized image bytes
 }
 
 export type Json =

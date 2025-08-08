@@ -4,6 +4,7 @@ import { PaperclipIcon } from './icons/PaperclipIcon';
 import { SendIcon } from './icons/SendIcon';
 import { StopIcon } from './icons/StopIcon';
 import { TuneIcon } from './icons/TuneIcon';
+import { canonicalizeImageToPngBytes, computeSha256Hex } from '../services/determinismService';
 
 interface ChatInputProps {
   onSendMessage: (prompt: string, images: ImageData[]) => void;
@@ -14,24 +15,15 @@ interface ChatInputProps {
   onToggleUltraMode: () => void;
 }
 
-const fileToImageData = (file: File): Promise<ImageData> => {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            if (typeof event.target?.result === 'string') {
-                const dataUrl = event.target.result;
-                const base64Data = dataUrl.split(',')[1];
-                resolve({
-                    mimeType: file.type,
-                    data: base64Data,
-                });
-            } else {
-                reject(new Error('Failed to read file as data URL.'));
-            }
-        };
-        reader.onerror = (error) => reject(error);
-        reader.readAsDataURL(file);
-    });
+const fileToImageData = async (file: File): Promise<ImageData> => {
+    const bytes = await canonicalizeImageToPngBytes(file);
+    const hash = await computeSha256Hex(bytes);
+    const base64Data = btoa(String.fromCharCode(...bytes));
+    return {
+        mimeType: 'image/png',
+        data: base64Data,
+        hash,
+    };
 };
 
 

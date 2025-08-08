@@ -5,6 +5,8 @@ import { Message } from './Message';
 import { analyzeChartStream } from '../services/geminiService';
 import { useSession } from '../contexts/SessionContext';
 import { EmptyChat } from './EmptyChat';
+import { buildCacheKey } from '../services/determinismService';
+import { getCache, setCache } from '../services/cacheService';
 
 interface ChatViewProps {
     defaultUltraMode: boolean;
@@ -37,6 +39,35 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode }) => {
   const handleSendMessage = useCallback(async (prompt: string, images: ImageData[]) => {
     if (!activeSession || (!prompt && (!images || images.length === 0))) return;
     
+    const imageHashes = (images || []).map(i => i.hash!).filter(Boolean);
+    const promptVersion = 'p1';
+    const modelVersion = 'gemini-2.5-flash';
+    const cacheKey = imageHashes.length > 0 ? buildCacheKey({ imageHashes, promptVersion, modelVersion, ultra: isUltraMode }) : '';
+
+    // If analyzing images and cache exists, short-circuit
+    if (imageHashes.length > 0) {
+      const cached = getCache(cacheKey);
+      if (cached) {
+        const assistantMessageId = `msg_${Date.now() + 1}`;
+        const assistantMessage: ChatMessage = {
+          id: assistantMessageId,
+          role: 'assistant',
+          content: JSON.parse(cached.raw) as AnalysisResult,
+          thinkingText: (JSON.parse(cached.raw) as AnalysisResult).thinkingProcess,
+          rawResponse: cached.raw,
+        };
+        const messagesWithUser: ChatMessage[] = [...activeSession.messages, {
+          id: `msg_${Date.now()}`,
+          role: 'user',
+          content: prompt,
+          ...(images && images.length > 0 && { images: images.map(img => `data:${img.mimeType};base64,${img.data}`) }),
+          ...(imageHashes.length > 0 && { imageHashes }),
+        }];
+        updateSession(activeSession.id, { messages: [...messagesWithUser, assistantMessage] });
+        return;
+      }
+    }
+
     abortControllerRef.current = new AbortController();
     setIsLoading(true);
 
@@ -45,6 +76,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode }) => {
       role: 'user',
       content: prompt,
       ...(images && images.length > 0 && { images: images.map(img => `data:${img.mimeType};base64,${img.data}`) }),
+      ...(imageHashes.length > 0 && { imageHashes }),
     };
 
     const assistantMessageId = `msg_${Date.now() + 1}`;
@@ -94,6 +126,19 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode }) => {
                 } else {
                     finalContent = parsedJson as AnalysisResult;
                     thinkingText = (finalContent as AnalysisResult).thinkingProcess;
+                    // cache exact duplicate image hashes
+                    if (imageHashes.length > 0) {
+                      setCache(cacheKey, {
+                        signal: (finalContent as AnalysisResult).signal,
+                        confidence: ((finalContent as AnalysisResult).overallConfidenceScore ?? 50) / 100,
+                        raw: fullResponseText,
+                        modelVersion,
+                        promptVersion,
+                        imageHashes,
+                        ultra: isUltraMode,
+                        timestamp: Date.now(),
+                      });
+                    }
                 }
             } catch (e) {
                 console.error("Failed to parse JSON response:", e, "Raw response:", fullResponseText);
@@ -168,6 +213,28 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode }) => {
         }
     }
 
+    // Cache check using stored hashes if present
+    const imageHashes = (lastUserMessage as any).imageHashes as string[] | undefined;
+    const promptVersion = 'p1';
+    const modelVersion = 'gemini-2.5-flash';
+    const cacheKey = imageHashes && imageHashes.length > 0 ? buildCacheKey({ imageHashes, promptVersion, modelVersion, ultra: isUltraMode }) : '';
+    if (cacheKey) {
+      const cached = getCache(cacheKey);
+      if (cached) {
+        const finalSessionState = useSession.getState().sessions.find(s => s.id === activeSession.id);
+        if (!finalSessionState) return;
+        const finalAssistantMsgIndex = finalSessionState.messages.findIndex(m => m.id === assistantMessageToUpdate.id);
+        if (finalAssistantMsgIndex === -1) return;
+        const updatedMessages = [...finalSessionState.messages];
+        const parsed = JSON.parse(cached.raw) as AnalysisResult;
+        updatedMessages[finalAssistantMsgIndex].content = parsed;
+        updatedMessages[finalAssistantMsgIndex].thinkingText = parsed.thinkingProcess;
+        updatedMessages[finalAssistantMsgIndex].rawResponse = cached.raw;
+        updateSession(activeSession.id, { messages: updatedMessages });
+        return;
+      }
+    }
+
     abortControllerRef.current = new AbortController();
     setIsLoading(true);
 
@@ -211,6 +278,18 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode }) => {
                 } else {
                     finalContent = parsedJson as AnalysisResult;
                     thinkingText = (finalContent as AnalysisResult).thinkingProcess;
+                    if (imageHashes && imageHashes.length > 0) {
+                      setCache(cacheKey, {
+                        signal: (finalContent as AnalysisResult).signal,
+                        confidence: ((finalContent as AnalysisResult).overallConfidenceScore ?? 50) / 100,
+                        raw: fullResponseText,
+                        modelVersion,
+                        promptVersion,
+                        imageHashes,
+                        ultra: isUltraMode,
+                        timestamp: Date.now(),
+                      });
+                    }
                 }
             } catch (e) {
                 console.error("Failed to parse JSON response:", e, "Raw response:", fullResponseText);

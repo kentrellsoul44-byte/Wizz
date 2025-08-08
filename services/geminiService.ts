@@ -192,13 +192,18 @@ export async function* analyzeChartStream(history: ChatMessage[], prompt: string
         ? { // Analysis config for chart images
             systemInstruction: isUltraMode ? ULTRA_SYSTEM_INSTRUCTION : SYSTEM_INSTRUCTION,
             temperature: 0,
+            topK: 1,
+            topP: 1,
             seed: 42,
             responseMimeType: 'application/json',
             responseSchema: analysisResultSchema,
         }
         : { // Conversational config for text-only prompts
             systemInstruction: isUltraMode ? CONVERSATIONAL_SYSTEM_INSTRUCTION_ULTRA : CONVERSATIONAL_SYSTEM_INSTRUCTION,
-            temperature: 0.7,
+            temperature: 0,
+            topK: 1,
+            topP: 1,
+            seed: 42,
         };
 
     try {
