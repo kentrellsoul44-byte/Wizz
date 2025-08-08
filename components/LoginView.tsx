@@ -52,7 +52,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onGoogleLogin, onEmailLogi
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen w-full bg-brand-bg text-text-primary p-4">
-      <div className="max-w-sm w-full text-center">
+      <div className="max-w-sm w-full text-center bg-sidebar-bg border border-border-color rounded-lg shadow-xl p-6 md:p-8">
         <div className="flex justify-center mb-6">
             <div className="w-20 h-20 bg-accent-blue rounded-full flex items-center justify-center">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-10 h-10 text-white">
