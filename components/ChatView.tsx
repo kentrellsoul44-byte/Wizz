@@ -7,9 +7,6 @@ import { useSession } from '../contexts/SessionContext';
 import { EmptyChat } from './EmptyChat';
 import { buildCacheKey } from '../services/determinismService';
 import { getCache, setCache } from '../services/cacheService';
-import { LiveChart, LiveChartHandle } from './LiveChart';
-import { LiveChartControls } from './LiveChartControls';
-import type { Interval } from '../services/marketDataService';
 
 interface ChatViewProps {
     defaultUltraMode: boolean;
@@ -20,12 +17,6 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [initialPrompt, setInitialPrompt] = useState<{key: number, text: string}>({key: 0, text: ''});
   const [isUltraMode, setIsUltraMode] = useState(defaultUltraMode);
-  const [isLiveChartActive, setIsLiveChartActive] = useState(false);
-  const [liveSymbol, setLiveSymbol] = useState('BTCUSDT');
-  const [liveInterval, setLiveInterval] = useState<Interval>('1m');
-  const [isLivePaused, setIsLivePaused] = useState(false);
-  const [liveRefreshToken, setLiveRefreshToken] = useState(0);
-  const liveChartRef = useRef<LiveChartHandle | null>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -338,67 +329,32 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode }) => {
 
   return (
     <div className="flex flex-1 flex-col bg-chat-bg overflow-hidden">
-      {isLiveChartActive ? (
-        <>
-          <div className="flex-1 overflow-hidden p-6">
-            <div className="w-full h-full rounded-lg border border-border-color">
-              <LiveChart ref={liveChartRef as any} symbol={liveSymbol} interval={liveInterval} isPaused={isLivePaused} refreshToken={liveRefreshToken} />
-            </div>
-          </div>
-          <div className="px-6 pb-4 bg-chat-bg">
-            <LiveChartControls
-              symbol={liveSymbol}
-              onSymbolChange={setLiveSymbol}
-              interval={liveInterval}
-              onIntervalChange={setLiveInterval}
-              isPaused={isLivePaused}
-              onTogglePaused={() => setIsLivePaused((p) => !p)}
-              onCloseLiveChart={() => setIsLiveChartActive(false)}
-              onApply={() => setLiveRefreshToken((n) => n + 1)}
-              onAnalyze={async () => {
-                // Capture PNG and analyze via existing flow
-                const pngBase64 = liveChartRef.current?.capturePng();
-                if (!pngBase64 || isLoading || !activeSession) return;
-                const image: ImageData = { mimeType: 'image/png', data: pngBase64 };
-                const prompt = `Analyze this live ${liveSymbol} chart on interval ${liveInterval}.`;
-                await handleSendMessage(prompt, [image]);
-              }}
-              onAutoFit={() => liveChartRef.current?.autoFit()}
+      <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-6 space-y-6 scroll-smooth">
+        {activeSession.messages.length === 0 ? (
+           <EmptyChat onExampleClick={handleExamplePrompt} />
+        ) : (
+          activeSession.messages.map((message, index) => (
+            <Message 
+              key={message.id} 
+              message={message}
+              isLastMessage={index === activeSession.messages.length - 1}
+              isLoading={isLoading && index === activeSession.messages.length - 1 && message.role === 'assistant'}
+              onRegenerate={handleRegenerateResponse}
             />
-          </div>
-        </>
-      ) : (
-        <>
-          <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-6 space-y-6 scroll-smooth">
-            {activeSession.messages.length === 0 ? (
-               <EmptyChat onExampleClick={handleExamplePrompt} />
-            ) : (
-              activeSession.messages.map((message, index) => (
-                <Message 
-                  key={message.id} 
-                  message={message}
-                  isLastMessage={index === activeSession.messages.length - 1}
-                  isLoading={isLoading && index === activeSession.messages.length - 1 && message.role === 'assistant'}
-                  onRegenerate={handleRegenerateResponse}
-                />
-              ))
-            )}
-          </div>
-          <div className="px-6 pb-4 bg-chat-bg">
-            <ChatInput 
-                key={initialPrompt.key}
-                onSendMessage={handleSendMessage} 
-                isLoading={isLoading} 
-                onStopGeneration={handleStopGeneration}
-                initialPrompt={initialPrompt.text}
-                isUltraMode={isUltraMode}
-                onToggleUltraMode={() => setIsUltraMode(prev => !prev)}
-                isLiveChart={isLiveChartActive}
-                onToggleLiveChart={() => setIsLiveChartActive((p) => !p)}
-            />
-          </div>
-        </>
-      )}
+          ))
+        )}
+      </div>
+      <div className="px-6 pb-4 bg-chat-bg">
+        <ChatInput 
+            key={initialPrompt.key}
+            onSendMessage={handleSendMessage} 
+            isLoading={isLoading} 
+            onStopGeneration={handleStopGeneration}
+            initialPrompt={initialPrompt.text}
+            isUltraMode={isUltraMode}
+            onToggleUltraMode={() => setIsUltraMode(prev => !prev)}
+        />
+      </div>
     </div>
   );
 }

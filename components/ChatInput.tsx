@@ -13,8 +13,6 @@ interface ChatInputProps {
   initialPrompt?: string;
   isUltraMode: boolean;
   onToggleUltraMode: () => void;
-  isLiveChart?: boolean;
-  onToggleLiveChart?: () => void;
 }
 
 const fileToImageData = async (file: File): Promise<ImageData> => {
@@ -29,7 +27,7 @@ const fileToImageData = async (file: File): Promise<ImageData> => {
 };
 
 
-export const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading, onStopGeneration, initialPrompt, isUltraMode, onToggleUltraMode, isLiveChart = false, onToggleLiveChart }) => {
+export const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading, onStopGeneration, initialPrompt, isUltraMode, onToggleUltraMode }) => {
   const [prompt, setPrompt] = useState('');
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
@@ -194,18 +192,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading, 
                         </label>
                     </div>
                     <p className="text-xs text-text-secondary mt-2 border-t border-border-color pt-2">Provides a more detailed, multi-pass analysis for higher accuracy.</p>
-                    <div className="mt-3 pt-3 border-t border-border-color">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h4 className="font-semibold text-text-primary">Live Chart</h4>
-                          <p className="text-xs text-text-secondary">Stream real-time candlesticks</p>
-                        </div>
-                        <label htmlFor="live-toggle" className="relative inline-flex items-center cursor-pointer">
-                          <input type="checkbox" id="live-toggle" className="sr-only peer" checked={!!isLiveChart} onChange={onToggleLiveChart} />
-                          <div className="w-11 h-6 bg-border-color peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-offset-2 peer-focus:ring-accent-blue peer-focus:ring-offset-sidebar-bg rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-blue"></div>
-                        </label>
-                      </div>
-                    </div>
                 </div>
             )}
         </div>
