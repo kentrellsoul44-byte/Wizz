@@ -1,0 +1,68 @@
+/* Global styles */
+:root {
+  --radius-md: 10px;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  font-family: Inter, ui-sans-serif, system-ui, Segoe UI, Roboto, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+code, pre, kbd, samp {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, 'Courier New', monospace;
+}
+
+/* Better focus outline */
+:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* Smooth scrolling area for chat */
+.scroll-smooth {
+  scroll-behavior: smooth;
+}
+
+/* Nice scrollbars */
+* {
+  scrollbar-color: #9ca3af transparent;
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  height: 10px;
+  width: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: rgba(156, 163, 175, 0.5);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(156, 163, 175, 0.8);
+}
+
+/* Text selection */
+::selection {
+  background: rgba(59, 130, 246, 0.2);
+}
+
+/* Utility to clamp prose width in chat */
+.prose {
+  max-width: 72ch;
+}
+
+/* Card radius consistency */
+.rounded-card {
+  border-radius: var(--radius-md);
+}

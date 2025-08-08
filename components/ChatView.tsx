@@ -329,7 +329,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode }) => {
 
   return (
     <div className="flex flex-1 flex-col bg-chat-bg overflow-hidden">
-      <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-6 space-y-6">
+      <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-6 space-y-6 scroll-smooth">
         {activeSession.messages.length === 0 ? (
            <EmptyChat onExampleClick={handleExamplePrompt} />
         ) : (
