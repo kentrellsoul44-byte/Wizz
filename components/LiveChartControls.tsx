@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { Interval } from '../services/marketDataService';
 
 interface LiveChartControlsProps {
@@ -9,6 +9,7 @@ interface LiveChartControlsProps {
   isPaused: boolean;
   onTogglePaused: () => void;
   onCloseLiveChart: () => void;
+  onApply?: () => void;
 }
 
 const INTERVALS: Interval[] = ['1m', '5m', '15m', '1h', '4h', '1d'];
@@ -22,12 +23,18 @@ export const LiveChartControls: React.FC<LiveChartControlsProps> = ({
   isPaused,
   onTogglePaused,
   onCloseLiveChart,
+  onApply,
 }) => {
   const [input, setInput] = useState(symbol);
 
+  useEffect(() => {
+    setInput(symbol);
+  }, [symbol]);
+
   const applySymbol = () => {
-    const s = input.trim().toUpperCase();
-    onSymbolChange(s || 'BTCUSDT');
+    const s = input.trim().toUpperCase() || symbol;
+    if (s !== symbol) onSymbolChange(s);
+    onApply?.();
   };
 
   return (
@@ -44,7 +51,7 @@ export const LiveChartControls: React.FC<LiveChartControlsProps> = ({
         <button onClick={applySymbol} className="px-2 py-1 rounded bg-accent-blue text-white text-sm">Apply</button>
         <div className="flex items-center gap-1">
           {DEFAULTS.map((s) => (
-            <button key={s} onClick={() => { setInput(s); onSymbolChange(s); }} className={`px-2 py-1 rounded text-sm border ${symbol === s ? 'bg-accent-blue text-white border-transparent' : 'border-border-color text-text-secondary hover:text-text-primary'}`}>{s}</button>
+            <button key={s} onClick={() => { setInput(s); onSymbolChange(s); onApply?.(); }} className={`px-2 py-1 rounded text-sm border ${symbol === s ? 'bg-accent-blue text-white border-transparent' : 'border-border-color text-text-secondary hover:text-text-primary'}`}>{s}</button>
           ))}
         </div>
       </div>
@@ -52,7 +59,7 @@ export const LiveChartControls: React.FC<LiveChartControlsProps> = ({
         <span className="text-sm text-text-secondary">Interval</span>
         <select
           value={interval}
-          onChange={(e) => onIntervalChange(e.target.value as Interval)}
+          onChange={(e) => { onIntervalChange(e.target.value as Interval); onApply?.(); }}
           className="bg-transparent border border-border-color rounded px-2 py-1 text-sm text-text-primary"
           aria-label="Interval"
         >
