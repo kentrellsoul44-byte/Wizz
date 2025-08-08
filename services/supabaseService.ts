@@ -22,6 +22,11 @@ export const supabase = createClient<Database>(
 
 const supabaseNotConfiguredError = new Error("Supabase is not configured. Please check your environment variables.");
 
+function isNetworkFetchError(err: unknown): boolean {
+  const message = typeof err === 'object' && err !== null ? (err as any).message : String(err);
+  return typeof message === 'string' && /Failed to fetch|NetworkError|TypeError: Failed to fetch/i.test(message);
+}
+
 // --- User Preferences ---
 
 export interface UserPreferences {
@@ -53,9 +58,12 @@ export const getUserPreferences = async (userId: string): Promise<UserPreference
     });
 
   if (upsertError) {
-    // We log this error but don't immediately fail. It might be a transient issue,
-    // or an RLS policy issue that still allows SELECTs. The select below is the real source of truth.
-    console.error('Error attempting to create default preferences:', upsertError);
+    // If network is unavailable, silently fall back to defaults to avoid noisy logs on startup.
+    if (isNetworkFetchError(upsertError)) {
+      return { ...defaultPreferences };
+    }
+    // Otherwise warn but continue to attempt a SELECT as source of truth.
+    console.warn('Error attempting to create default preferences:', upsertError);
   }
   
   // Now, fetch the user's preferences. We use single() because after the upsert,
@@ -76,6 +84,9 @@ export const getUserPreferences = async (userId: string): Promise<UserPreference
       .eq('user_id', userId)
       .single();
     if (retry.error) {
+      if (isNetworkFetchError(retry.error)) {
+        return { ...defaultPreferences };
+      }
       console.error('Error fetching preferences:', retry.error);
       return { ...defaultPreferences };
     }
@@ -86,8 +97,10 @@ export const getUserPreferences = async (userId: string): Promise<UserPreference
   }
 
   if (selectError) {
-    // This is the critical error. If we can't read the preferences, we must fall back to defaults.
-    console.error('Error fetching preferences:', selectError);
+    // If we can't read preferences, fall back to defaults. Suppress logs on network errors.
+    if (!isNetworkFetchError(selectError)) {
+      console.error('Error fetching preferences:', selectError);
+    }
     return { ...defaultPreferences };
   }
 
