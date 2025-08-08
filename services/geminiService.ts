@@ -249,7 +249,10 @@ export async function* analyzeChartStream(history: ChatMessage[], prompt: string
                 console.log('Stream generation aborted by user.');
                 break;
             }
-            yield chunk.text;
+            const textChunk = (chunk as any)?.text;
+            if (typeof textChunk === 'string' && textChunk.length > 0) {
+                yield textChunk;
+            }
         }
 
     } catch (error) {

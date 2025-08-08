@@ -9,6 +9,18 @@ import { buildCacheKey } from '../services/determinismService';
 import { getCache, setCache } from '../services/cacheService';
 import { applyPostProcessingGates } from '../services/postProcessingService';
 
+function sanitizeJsonResponse(text: string): string {
+  const input = (text ?? '').trim();
+  const fenced = input.match(/^```(?:json)?\s*([\s\S]*?)```\s*$/i);
+  const body = fenced ? fenced[1].trim() : input;
+  const first = body.indexOf('{');
+  const last = body.lastIndexOf('}');
+  if (first !== -1 && last !== -1 && last > first) {
+    return body.slice(first, last + 1);
+  }
+  return body;
+}
+
 interface ChatViewProps {
     defaultUltraMode: boolean;
 }
@@ -121,7 +133,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode }) => {
 
         if (images && images.length > 0) { // We were analyzing images, expect JSON
             try {
-                const parsedJson = JSON.parse(fullResponseText);
+                const parsedJson = JSON.parse(sanitizeJsonResponse(fullResponseText));
                 if (parsedJson.error) {
                     finalContent = `Error: ${parsedJson.error}`;
                 } else {
@@ -274,7 +286,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode }) => {
 
         if (images && images.length > 0) { // We were analyzing images, expect JSON
             try {
-                const parsedJson = JSON.parse(fullResponseText);
+                const parsedJson = JSON.parse(sanitizeJsonResponse(fullResponseText));
                 if (parsedJson.error) {
                     finalContent = `Error: ${parsedJson.error}`;
                 } else {
