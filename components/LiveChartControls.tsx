@@ -10,6 +10,7 @@ interface LiveChartControlsProps {
   onTogglePaused: () => void;
   onCloseLiveChart: () => void;
   onApply?: () => void;
+  onAnalyze?: () => void;
 }
 
 const INTERVALS: Interval[] = ['1m', '5m', '15m', '1h', '4h', '1d'];
@@ -24,6 +25,7 @@ export const LiveChartControls: React.FC<LiveChartControlsProps> = ({
   onTogglePaused,
   onCloseLiveChart,
   onApply,
+  onAnalyze,
 }) => {
   const [input, setInput] = useState(symbol);
 
@@ -70,6 +72,7 @@ export const LiveChartControls: React.FC<LiveChartControlsProps> = ({
       </div>
       <div className="flex items-center gap-2 ml-auto">
         <button onClick={onTogglePaused} className={`px-3 py-1 rounded text-sm ${isPaused ? 'bg-gray-500 text-white' : 'bg-green-600 text-white'}`}>{isPaused ? 'Resume' : 'Pause'}</button>
+        <button onClick={onAnalyze} className="px-3 py-1 rounded text-sm bg-accent-blue text-white">Analyze</button>
         <button onClick={onCloseLiveChart} className="px-3 py-1 rounded text-sm bg-accent-red text-white">Back to Chat</button>
       </div>
     </div>

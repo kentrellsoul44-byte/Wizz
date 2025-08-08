@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useImperativeHandle, forwardRef } from 'react';
 import { createChart, ColorType, IChartApi, CandlestickSeriesPartialOptions } from 'lightweight-charts';
 import { fetchHistoricalKlines, openKlineWebSocket, Interval } from '../services/marketDataService';
 
@@ -9,18 +9,38 @@ export interface LiveChartProps {
   refreshToken?: number;
 }
 
+export interface LiveChartHandle {
+  capturePng: () => string | null; // base64 without data URL prefix
+}
+
 function detectTheme(): 'light' | 'dark' {
   const root = document.documentElement;
   return root.classList.contains('dark') ? 'dark' : 'light';
 }
 
-export const LiveChart: React.FC<LiveChartProps> = ({ symbol, interval, isPaused, refreshToken = 0 }) => {
+export const LiveChart = forwardRef<LiveChartHandle, LiveChartProps>(({ symbol, interval, isPaused, refreshToken = 0 }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ReturnType<IChartApi['addCandlestickSeries']> | null>(null);
   const [theme, setTheme] = useState<'light' | 'dark'>(detectTheme());
   const [isLoading, setIsLoading] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
+
+  useImperativeHandle(ref, () => ({
+    capturePng: () => {
+      const container = containerRef.current;
+      if (!container) return null;
+      const canvas = container.querySelector('canvas');
+      if (!canvas) return null;
+      try {
+        const dataUrl = (canvas as HTMLCanvasElement).toDataURL('image/png');
+        const prefix = 'data:image/png;base64,';
+        return dataUrl.startsWith(prefix) ? dataUrl.slice(prefix.length) : null;
+      } catch {
+        return null;
+      }
+    },
+  }), []);
 
   // Observe theme changes
   useEffect(() => {
@@ -184,4 +204,6 @@ export const LiveChart: React.FC<LiveChartProps> = ({ symbol, interval, isPaused
       )}
     </div>
   );
-};
+});
+
+LiveChart.displayName = 'LiveChart';
