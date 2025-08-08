@@ -11,6 +11,7 @@ interface LiveChartControlsProps {
   onCloseLiveChart: () => void;
   onApply?: () => void;
   onAnalyze?: () => void;
+  onAutoFit?: () => void;
 }
 
 const INTERVALS: Interval[] = ['1m', '5m', '15m', '1h', '4h', '1d'];
@@ -26,6 +27,7 @@ export const LiveChartControls: React.FC<LiveChartControlsProps> = ({
   onCloseLiveChart,
   onApply,
   onAnalyze,
+  onAutoFit,
 }) => {
   const [input, setInput] = useState(symbol);
 
@@ -69,8 +71,14 @@ export const LiveChartControls: React.FC<LiveChartControlsProps> = ({
             <option key={i} value={i} className="bg-sidebar-bg text-text-primary">{i}</option>
           ))}
         </select>
+        <div className="flex items-center gap-1 ml-2">
+          {INTERVALS.map((i) => (
+            <button key={i} onClick={() => { onIntervalChange(i); onApply?.(); }} className={`px-2 py-1 rounded text-sm border ${interval === i ? 'bg-accent-blue text-white border-transparent' : 'border-border-color text-text-secondary hover:text-text-primary'}`}>{i}</button>
+          ))}
+        </div>
       </div>
       <div className="flex items-center gap-2 ml-auto">
+        <button onClick={onAutoFit} className="px-3 py-1 rounded text-sm border border-border-color text-text-secondary hover:text-text-primary">Auto-fit</button>
         <button onClick={onTogglePaused} className={`px-3 py-1 rounded text-sm ${isPaused ? 'bg-gray-500 text-white' : 'bg-green-600 text-white'}`}>{isPaused ? 'Resume' : 'Pause'}</button>
         <button onClick={onAnalyze} className="px-3 py-1 rounded text-sm bg-accent-blue text-white">Analyze</button>
         <button onClick={onCloseLiveChart} className="px-3 py-1 rounded text-sm bg-accent-red text-white">Back to Chat</button>
