@@ -28,7 +28,7 @@ const analysisResultSchema = {
         confidence: {
             type: Type.STRING,
             enum: ['HIGH', 'LOW'],
-            description: "The confidence level of the signal. HIGH if overallConfidenceScore >= 70, otherwise LOW."
+            description: "The confidence level of the signal. HIGH if overallConfidenceScore >= 75, otherwise LOW."
         },
         trade: {
             type: Type.OBJECT,
@@ -78,12 +78,26 @@ After your internal analysis, you MUST provide your entire response as a single,
 - The complete 7-step analysis MUST be placed in the 'thinkingProcess' field as a single Markdown string.
 - The self-critique MUST be placed in 'verificationSummary'.
 - The final score MUST be placed in 'overallConfidenceScore'.
-- The 'confidence' field must be 'HIGH' if 'overallConfidenceScore' is 70 or greater, otherwise it must be 'LOW'.
+- The 'confidence' field must be 'HIGH' if 'overallConfidenceScore' is 75 or greater, otherwise it must be 'LOW'.
 - If 'confidence' is 'LOW' or 'signal' is 'NEUTRAL', the 'trade' and 'riskRewardRatio' fields MUST be null.
 - If you provide a 'trade' signal, you MUST calculate the 'riskRewardRatio'.
   - For a BUY signal: Risk/Reward = (Take Profit - Entry) / (Entry - Stop Loss).
   - For a SELL signal: Risk/Reward = (Entry - Take Profit) / (Stop Loss - Entry).
   - Format the result as a string like "2.5:1". Round to one decimal place.
+
+STRICT RISK RULES TO REDUCE STOP-LOSS HITS AND BOOST WIN RATE
+- Default to NEUTRAL unless there is strong multi-factor confluence.
+- Only provide a trade if ALL are true:
+  1) overallConfidenceScore >= 75 (HIGH);
+  2) clear invalidation level exists (recent swing high/low or structural break);
+  3) riskRewardRatio is >= 1.8:1 based on a realistic entry, take profit, and a robust stop.
+- Stop Loss Placement (must be robust):
+  - Place stop beyond the invalidation point (e.g., below the last swing low for BUY, above the last swing high for SELL) with a buffer that is outside typical wick noise.
+  - Avoid placing the stop inside obvious liquidity clusters such as equal highs/lows or immediately below/above a level likely to be swept.
+  - If a robust stop produces R:R < 1.8:1, do NOT provide a trade; output NEUTRAL and set trade=null.
+- Entry Quality:
+  - Prefer pullback/mitigation entries at or near a defined level rather than chasing extended moves.
+  - If the precise numeric entry cannot be justified from the chart, do not provide a trade.
 
 Do not add any text, formatting, or markdown backticks before or after the final JSON object. Your entire output must be the JSON object itself.`;
 
@@ -108,9 +122,10 @@ You will conduct a three-pass verification process for every chart:
 **PASS 3: Synthesis & Final Verdict (The Execution Plan)**
 1.  **Synthesized Narrative:** Combine the findings from all passes into a coherent, final analysis narrative. This is your definitive read of the market.
 2.  **Final Confidence Score:** Based on the degree of confluence and the severity of conflicting data found in Pass 2, provide a final 'overallConfidenceScore' from 0 to 100. Be brutally honest.
-3.  **Final Signal Generation:** Based on the score, generate the final 'signal' ('BUY', 'SELL', 'NEUTRAL') and 'confidence' ('HIGH' for score >= 70, 'LOW' otherwise).
-4.  **Trade Parameters (High Confidence ONLY):** If confidence is 'HIGH', provide a precise 'trade' plan with 'entryPrice', 'takeProfit', and 'stopLoss'. The entry should be a specific level, not a wide range. The stop loss must be placed logically based on market structure (e.g., below a swing low or invalidation point).
-5.  **Risk/Reward Calculation:** If a trade is provided, calculate and include the 'riskRewardRatio'.
+3.  **Final Signal Generation:** Based on the score, generate the final 'signal' ('BUY', 'SELL', 'NEUTRAL') and 'confidence' ('HIGH' for score >= 75, 'LOW' otherwise). Default to NEUTRAL unless conviction is high.
+4.  **Trade Parameters (High Confidence ONLY):** If confidence is 'HIGH', provide a precise 'trade' plan with 'entryPrice', 'takeProfit', and 'stopLoss'. The entry should be a specific level, not a wide range.
+5.  **Stop-Run Safeguard (critical):** Place the stop beyond the invalidation with a sensible buffer outside typical wick noise and away from obvious liquidity pools. If a robust stop leads to R:R < 1.8:1, do NOT provide a trade.
+6.  **Risk/Reward Calculation:** If a trade is provided, calculate and include the 'riskRewardRatio'.
 
 After this entire internal process, you MUST provide your response as a single, valid, minified JSON object conforming to the provided schema.
 
@@ -208,7 +223,7 @@ export async function* analyzeChartStream(history: ChatMessage[], prompt: string
 
     try {
         const responseStream = await ai.models.generateContentStream({
-            model: 'gemini-2.5-flash',
+            model: hasImages ? (isUltraMode ? 'gemini-2.5-pro' : 'gemini-2.5-flash') : 'gemini-2.5-flash',
             contents: contents,
             config: modelConfig as any,
         });

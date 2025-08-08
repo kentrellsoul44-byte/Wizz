@@ -40,8 +40,8 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode }) => {
     if (!activeSession || (!prompt && (!images || images.length === 0))) return;
     
     const imageHashes = (images || []).map(i => i.hash!).filter(Boolean);
-    const promptVersion = 'p1';
-    const modelVersion = 'gemini-2.5-flash';
+    const promptVersion = 'p2';
+    const modelVersion = isUltraMode ? 'gemini-2.5-pro' : 'gemini-2.5-flash';
     const cacheKey = imageHashes.length > 0 ? buildCacheKey({ imageHashes, promptVersion, modelVersion, ultra: isUltraMode }) : '';
 
     // If analyzing images and cache exists, short-circuit
@@ -215,8 +215,8 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode }) => {
 
     // Cache check using stored hashes if present
     const imageHashes = (lastUserMessage as any).imageHashes as string[] | undefined;
-    const promptVersion = 'p1';
-    const modelVersion = 'gemini-2.5-flash';
+    const promptVersion = 'p2';
+    const modelVersion = isUltraMode ? 'gemini-2.5-pro' : 'gemini-2.5-flash';
     const cacheKey = imageHashes && imageHashes.length > 0 ? buildCacheKey({ imageHashes, promptVersion, modelVersion, ultra: isUltraMode }) : '';
     if (cacheKey) {
       const cached = getCache(cacheKey);
