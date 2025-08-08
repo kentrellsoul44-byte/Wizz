@@ -18,7 +18,20 @@ interface ChatInputProps {
 const fileToImageData = async (file: File): Promise<ImageData> => {
     const bytes = await canonicalizeImageToPngBytes(file);
     const hash = await computeSha256Hex(bytes);
-    const base64Data = btoa(String.fromCharCode(...bytes));
+
+    // Convert to base64 safely without spreading large arrays
+    const blob = new Blob([bytes], { type: 'image/png' });
+    const base64Data: string = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            const result = reader.result as string;
+            const commaIndex = result.indexOf(',');
+            resolve(commaIndex >= 0 ? result.slice(commaIndex + 1) : result);
+        };
+        reader.onerror = (e) => reject(e);
+        reader.readAsDataURL(blob);
+    });
+
     return {
         mimeType: 'image/png',
         data: base64Data,
