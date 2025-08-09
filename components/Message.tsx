@@ -135,9 +135,82 @@ const AnalysisCard: React.FC<{ result: AnalysisResult }> = ({ result }) => {
                   <p className="text-xs text-center text-text-secondary italic">No trade signal provided due to low confidence.</p>
               )}
 
+              {/* Multi-Timeframe Context */}
+              {result.isMultiTimeframeAnalysis && result.multiTimeframeContext && (
+                  <div>
+                      <h3 className="font-semibold text-text-primary mb-2">Multi-Timeframe Confluence</h3>
+                      <div className="bg-input-bg-50 p-3 rounded-lg space-y-3">
+                          <div className="flex justify-between items-center">
+                              <span className="text-sm font-medium text-text-secondary">Confluence Score</span>
+                              <span className="text-lg font-bold text-text-primary">{result.multiTimeframeContext.confluenceScore}/100</span>
+                          </div>
+                          <div className="w-full bg-border-color rounded-full h-2.5">
+                              <div className="bg-accent-green h-2.5 rounded-full" style={{ width: `${result.multiTimeframeContext.confluenceScore}%` }}></div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                              <div>
+                                  <span className="text-text-secondary">Overall Trend:</span>
+                                  <span className={`ml-1 font-medium ${
+                                      result.multiTimeframeContext.overallTrend === 'BULLISH' ? 'text-accent-green' :
+                                      result.multiTimeframeContext.overallTrend === 'BEARISH' ? 'text-accent-red' :
+                                      result.multiTimeframeContext.overallTrend === 'MIXED' ? 'text-accent-yellow' :
+                                      'text-text-secondary'
+                                  }`}>
+                                      {result.multiTimeframeContext.overallTrend}
+                                  </span>
+                              </div>
+                              <div>
+                                  <span className="text-text-secondary">Primary TF:</span>
+                                  <span className="ml-1 font-medium text-text-primary">{result.multiTimeframeContext.primaryTimeframe}</span>
+                              </div>
+                          </div>
+                          
+                          {/* Timeframe breakdown */}
+                          <div className="border-t border-border-color pt-2">
+                              <div className="text-xs font-medium text-text-secondary mb-2">Timeframe Analysis:</div>
+                              <div className="space-y-1">
+                                  {result.multiTimeframeContext.timeframeAnalyses.map((tf, idx) => (
+                                      <div key={idx} className="flex justify-between items-center text-xs">
+                                          <span className="font-medium">{tf.timeframe}</span>
+                                          <div className="flex items-center gap-2">
+                                              <span className={`px-1.5 py-0.5 rounded text-xs ${
+                                                  tf.trend === 'BULLISH' ? 'bg-accent-green-10 text-accent-green' :
+                                                  tf.trend === 'BEARISH' ? 'bg-accent-red-10 text-accent-red' :
+                                                  tf.trend === 'CONSOLIDATING' ? 'bg-accent-yellow-10 text-accent-yellow' :
+                                                  'bg-input-bg text-text-secondary'
+                                              }`}>
+                                                  {tf.trend}
+                                              </span>
+                                              <span className="text-text-secondary">{tf.confidence}%</span>
+                                          </div>
+                                      </div>
+                                  ))}
+                              </div>
+                          </div>
+
+                          {/* Conflicting signals */}
+                          {result.multiTimeframeContext.conflictingSignals && result.multiTimeframeContext.conflictingSignals.length > 0 && (
+                              <div className="border-t border-border-color pt-2">
+                                  <div className="text-xs font-medium text-accent-red mb-1">Conflicting Signals:</div>
+                                  <ul className="text-xs text-text-secondary space-y-0.5">
+                                      {result.multiTimeframeContext.conflictingSignals.map((conflict, idx) => (
+                                          <li key={idx} className="flex items-start">
+                                              <span className="text-accent-red mr-1">•</span>
+                                              {conflict}
+                                          </li>
+                                      ))}
+                                  </ul>
+                              </div>
+                          )}
+                      </div>
+                  </div>
+              )}
+
               {/* Verification Section */}
               <div>
-                  <h3 className="font-semibold text-text-primary mb-2">Verification</h3>
+                  <h3 className="font-semibold text-text-primary mb-2">
+                      {result.isMultiTimeframeAnalysis ? 'Final Verification' : 'Verification'}
+                  </h3>
                   <div className="bg-input-bg-50 p-3 rounded-lg space-y-2">
                       <div className="flex justify-between items-center">
                           <span className="text-sm font-medium text-text-secondary">AI Confidence Score</span>
@@ -166,21 +239,49 @@ export const Message: React.FC<MessageProps> = React.memo(({ message, isLastMess
     const { content, thinkingText } = message;
 
     if (isUser) {
+        // Handle both regular images and timeframe images
         const imageUrls: string[] = [];
         if (Array.isArray((message as any).images) && (message as any).images.length > 0) {
             imageUrls.push(...((message as any).images as string[]));
         } else if ((message as any).image) {
             imageUrls.push((message as any).image as string);
         }
+
+        const timeframeImages = (message as any).timeframeImages;
+        const hasTimeframeImages = timeframeImages && timeframeImages.length > 0;
+
         return (
             <div className="flex items-start gap-4 justify-end">
                 <div className="flex-1 max-w-2xl bg-accent-blue rounded-lg p-3 text-white">
                     {typeof content === 'string' && content && <p className="whitespace-pre-wrap">{content}</p>}
-                    {imageUrls.length > 0 && (
+                    
+                    {/* Regular images */}
+                    {imageUrls.length > 0 && !hasTimeframeImages && (
                         <div className="mt-2 grid grid-cols-2 md:grid-cols-3 gap-2">
                             {imageUrls.map((url, idx) => (
                                 <img key={idx} src={url} alt={`User upload ${idx+1}`} className="max-w-xs max-h-64 rounded-md border border-blue-400" />
                             ))}
+                        </div>
+                    )}
+
+                    {/* Multi-timeframe images */}
+                    {hasTimeframeImages && (
+                        <div className="mt-2 space-y-2">
+                            <div className="text-xs font-medium opacity-90">Multi-Timeframe Analysis:</div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                {timeframeImages.map((tfImg: any, idx: number) => (
+                                    <div key={idx} className="bg-white bg-opacity-10 rounded-lg p-2">
+                                        <div className="text-xs font-medium mb-1">
+                                            {tfImg.timeframe} {tfImg.label && `- ${tfImg.label}`}
+                                        </div>
+                                        <img 
+                                            src={`data:${tfImg.imageData.mimeType};base64,${tfImg.imageData.data}`}
+                                            alt={`${tfImg.timeframe} chart`} 
+                                            className="w-full max-h-48 object-cover rounded border border-blue-400"
+                                        />
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     )}
                 </div>

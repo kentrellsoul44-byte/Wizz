@@ -1,8 +1,8 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import type { ChatMessage, ImageData, AnalysisResult, MessageContent } from '../types';
+import type { ChatMessage, ImageData, AnalysisResult, MessageContent, TimeframeImageData } from '../types';
 import { ChatInput } from './ChatInput';
 import { Message } from './Message';
-import { analyzeChartStream } from '../services/geminiService';
+import { analyzeChartStream, analyzeMultiTimeframeStream } from '../services/geminiService';
 import { useSession } from '../contexts/SessionContext';
 import { EmptyChat } from './EmptyChat';
 import { buildCacheKey } from '../services/determinismService';
@@ -194,6 +194,152 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode }) => {
     }
   }, [activeSession, updateSession, updateSessionTitle, isUltraMode]);
 
+  const handleSendMultiTimeframeMessage = useCallback(async (prompt: string, timeframeImages: TimeframeImageData[]) => {
+    if (!activeSession || (!prompt && (!timeframeImages || timeframeImages.length === 0))) return;
+    
+    // Generate cache key based on all timeframe images
+    const imageHashes = timeframeImages.map(tf => tf.imageData.hash!).filter(Boolean);
+    const promptVersion = 'mtf_p1'; // Multi-timeframe prompt version
+    const modelVersion = isUltraMode ? 'gemini-2.5-pro' : 'gemini-2.5-flash';
+    const cacheKey = imageHashes.length > 0 ? buildCacheKey({ imageHashes, promptVersion, modelVersion, ultra: isUltraMode }) : '';
+
+    // Check cache for multi-timeframe analysis
+    if (imageHashes.length > 0) {
+      const cached = getCache(cacheKey);
+      if (cached) {
+        const assistantMessageId = `msg_${Date.now() + 1}`;
+        const assistantMessage: ChatMessage = {
+          id: assistantMessageId,
+          role: 'assistant',
+          content: JSON.parse(cached.raw) as AnalysisResult,
+          thinkingText: (JSON.parse(cached.raw) as AnalysisResult).thinkingProcess,
+          rawResponse: cached.raw,
+        };
+        const messagesWithUser: ChatMessage[] = [...activeSession.messages, {
+          id: `msg_${Date.now()}`,
+          role: 'user',
+          content: prompt,
+          timeframeImages,
+          imageHashes,
+        }];
+        updateSession(activeSession.id, { messages: [...messagesWithUser, assistantMessage] });
+        return;
+      }
+    }
+
+    abortControllerRef.current = new AbortController();
+    setIsLoading(true);
+
+    const userMessage: ChatMessage = {
+      id: `msg_${Date.now()}`,
+      role: 'user',
+      content: prompt,
+      timeframeImages,
+      ...(imageHashes.length > 0 && { imageHashes }),
+    };
+
+    const assistantMessageId = `msg_${Date.now() + 1}`;
+    const assistantMessage: ChatMessage = {
+      id: assistantMessageId,
+      role: 'assistant',
+      content: '',
+    };
+    
+    const messagesWithUser = [...activeSession.messages, userMessage];
+    updateSession(activeSession.id, { messages: messagesWithUser });
+    
+    const messagesWithAssistant = [...messagesWithUser, assistantMessage];
+    updateSession(activeSession.id, { messages: messagesWithAssistant });
+
+    let fullResponseText = '';
+    try {
+        const stream = analyzeMultiTimeframeStream(activeSession.messages, prompt, timeframeImages, abortControllerRef.current.signal, isUltraMode);
+        for await (const chunk of stream) {
+            if (abortControllerRef.current?.signal.aborted) break;
+            fullResponseText += chunk;
+        }
+
+        const finalSessionState = useSession.getState().sessions.find(s => s.id === activeSession.id);
+        if (!finalSessionState) return;
+
+        const finalAssistantMsgIndex = finalSessionState.messages.findIndex(m => m.id === assistantMessageId);
+        if (finalAssistantMsgIndex === -1) return;
+
+        const updatedMessages = [...finalSessionState.messages];
+
+        if (abortControllerRef.current?.signal.aborted) {
+            updatedMessages[finalAssistantMsgIndex].content = "Multi-timeframe analysis stopped by user.";
+            updateSession(activeSession.id, { messages: updatedMessages });
+            return;
+        }
+        
+        let finalContent: MessageContent;
+        let thinkingText = '';
+
+        if (timeframeImages && timeframeImages.length > 0) {
+            try {
+                const parsedJson = JSON.parse(sanitizeJsonResponse(fullResponseText));
+                if (parsedJson.error) {
+                    finalContent = `Error: ${parsedJson.error}`;
+                } else {
+                    const gated = applyPostProcessingGates(parsedJson as AnalysisResult, isUltraMode);
+                    finalContent = gated as AnalysisResult;
+                    thinkingText = gated.thinkingProcess;
+                    
+                    // Cache multi-timeframe analysis
+                    if (imageHashes.length > 0) {
+                      setCache(cacheKey, {
+                        signal: gated.signal,
+                        confidence: ((gated.overallConfidenceScore ?? 50) / 100),
+                        raw: JSON.stringify(gated),
+                        modelVersion,
+                        promptVersion,
+                        ultra: isUltraMode,
+                      });
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to parse multi-timeframe JSON response:', error);
+                finalContent = `Unable to parse the multi-timeframe analysis response. Raw response: ${fullResponseText.substring(0, 500)}...`;
+            }
+        } else {
+            finalContent = fullResponseText; // Conversational response
+        }
+
+        updatedMessages[finalAssistantMsgIndex] = {
+            ...updatedMessages[finalAssistantMsgIndex],
+            content: finalContent,
+            ...(thinkingText && { thinkingText }),
+            rawResponse: fullResponseText,
+        };
+
+        updateSession(activeSession.id, { messages: updatedMessages });
+
+        // Generate title for first message
+        if (finalSessionState.messages.length === 2 && typeof finalContent === 'object' && 'summary' in finalContent) {
+            const title = finalContent.summary?.substring(0, 50) + (finalContent.summary && finalContent.summary.length > 50 ? '...' : '') || 'Multi-Timeframe Analysis';
+            updateSessionTitle(activeSession.id, title);
+        } else if (finalSessionState.messages.length === 2) {
+            updateSessionTitle(activeSession.id, 'Multi-Timeframe Chat');
+        }
+        
+    } catch (error) {
+        console.error('Error in multi-timeframe analysis:', error);
+        const finalSessionState = useSession.getState().sessions.find(s => s.id === activeSession.id);
+        if (finalSessionState) {
+            const finalAssistantMsgIndex = finalSessionState.messages.findIndex(m => m.id === assistantMessageId);
+            if (finalAssistantMsgIndex !== -1) {
+                const updatedMessages = [...finalSessionState.messages];
+                updatedMessages[finalAssistantMsgIndex].content = `Sorry, I encountered an error during multi-timeframe analysis. Please try again.`;
+                updateSession(activeSession.id, { messages: updatedMessages });
+            }
+        }
+    } finally {
+        setIsLoading(false);
+        abortControllerRef.current = null;
+    }
+  }, [activeSession, updateSession, updateSessionTitle, isUltraMode]);
+
   const handleRegenerateResponse = useCallback(async () => {
     if (!activeSession || isLoading) return;
 
@@ -362,7 +508,8 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode }) => {
       <div className="px-6 pb-4 bg-chat-bg">
         <ChatInput 
             key={initialPrompt.key}
-            onSendMessage={handleSendMessage} 
+            onSendMessage={handleSendMessage}
+            onSendMultiTimeframeMessage={handleSendMultiTimeframeMessage}
             isLoading={isLoading} 
             onStopGeneration={handleStopGeneration}
             initialPrompt={initialPrompt.text}
