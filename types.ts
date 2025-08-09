@@ -180,6 +180,230 @@ export interface SMCAnalysisContext {
   };
 }
 
+// Advanced Pattern Recognition Types
+export type WyckoffPhase = 
+  | 'ACCUMULATION_PHASE_A' | 'ACCUMULATION_PHASE_B' | 'ACCUMULATION_PHASE_C' | 'ACCUMULATION_PHASE_D' | 'ACCUMULATION_PHASE_E'
+  | 'DISTRIBUTION_PHASE_A' | 'DISTRIBUTION_PHASE_B' | 'DISTRIBUTION_PHASE_C' | 'DISTRIBUTION_PHASE_D' | 'DISTRIBUTION_PHASE_E'
+  | 'MARKUP' | 'MARKDOWN' | 'UNIDENTIFIED';
+
+export type ElliottWaveType = 
+  | 'IMPULSE_1' | 'IMPULSE_3' | 'IMPULSE_5' | 'CORRECTIVE_2' | 'CORRECTIVE_4'
+  | 'CORRECTIVE_A' | 'CORRECTIVE_B' | 'CORRECTIVE_C' | 'COMPLETE_CYCLE' | 'EXTENDED_WAVE';
+
+export type ElliottWaveDegree = 'SUPERCYCLE' | 'CYCLE' | 'PRIMARY' | 'INTERMEDIATE' | 'MINOR' | 'MINUTE' | 'MINUETTE' | 'SUBMINUETTE';
+
+export type HarmonicPatternType = 
+  | 'GARTLEY_BULLISH' | 'GARTLEY_BEARISH'
+  | 'BUTTERFLY_BULLISH' | 'BUTTERFLY_BEARISH'
+  | 'BAT_BULLISH' | 'BAT_BEARISH'
+  | 'CRAB_BULLISH' | 'CRAB_BEARISH'
+  | 'CYPHER_BULLISH' | 'CYPHER_BEARISH'
+  | 'SHARK_BULLISH' | 'SHARK_BEARISH'
+  | 'DEEP_CRAB_BULLISH' | 'DEEP_CRAB_BEARISH';
+
+export type VolumeProfileType = 'VALUE_AREA_HIGH' | 'VALUE_AREA_LOW' | 'POINT_OF_CONTROL' | 'VOLUME_CLUSTER' | 'LOW_VOLUME_NODE';
+
+export interface WyckoffKeyLevel {
+  id: string;
+  price: number;
+  type: 'SPRING' | 'UPTHRUST' | 'LAST_POINT_OF_SUPPLY' | 'LAST_POINT_OF_SUPPORT' | 'BACKUP' | 'SIGN_OF_STRENGTH' | 'SIGN_OF_WEAKNESS';
+  timestamp: string;
+  significance: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  confirmed: boolean;
+  description: string;
+}
+
+export interface WyckoffAnalysis {
+  id: string;
+  currentPhase: WyckoffPhase;
+  phaseProgress: number; // 0-100 percentage through current phase
+  timeframe: TimeframeType;
+  keyLevels: WyckoffKeyLevel[];
+  volumeCharacteristics: {
+    climacticVolume: boolean;
+    volumeDrying: boolean;
+    volumeConfirmation: boolean;
+    averageVolume: number;
+  };
+  priceAction: {
+    narrowingSpread: boolean;
+    wideSpread: boolean;
+    effortVsResult: 'HARMONY' | 'DIVERGENCE' | 'NEUTRAL';
+  };
+  nextExpectedMove: {
+    direction: 'BULLISH' | 'BEARISH' | 'SIDEWAYS';
+    probability: number; // 0-100
+    targetPrice?: number;
+    timeEstimate?: string;
+  };
+  confidence: number; // 0-100
+  reasoning: string;
+}
+
+export interface ElliottWavePoint {
+  id: string;
+  wave: ElliottWaveType;
+  degree: ElliottWaveDegree;
+  price: number;
+  timestamp: string;
+  index: number;
+  confirmed: boolean;
+}
+
+export interface ElliottWaveAnalysis {
+  id: string;
+  timeframe: TimeframeType;
+  wavePoints: ElliottWavePoint[];
+  currentWave: ElliottWaveType;
+  currentDegree: ElliottWaveDegree;
+  waveProgress: number; // 0-100 percentage through current wave
+  impulseCorrective: 'IMPULSE' | 'CORRECTIVE';
+  nextExpectedWave: ElliottWaveType;
+  projections: {
+    nextWaveTarget?: number;
+    fibonacciLevels: {
+      level: number; // e.g., 0.618, 1.618
+      price: number;
+      type: 'RETRACEMENT' | 'EXTENSION';
+    }[];
+  };
+  invalidationLevel: number;
+  confidence: number; // 0-100
+  alternateCount?: {
+    description: string;
+    probability: number;
+    keyDifference: string;
+  };
+}
+
+export interface HarmonicRatio {
+  name: string; // e.g., 'XA', 'AB', 'BC', 'CD'
+  actual: number;
+  ideal: number;
+  tolerance: number;
+  withinTolerance: boolean;
+}
+
+export interface HarmonicPattern {
+  id: string;
+  type: HarmonicPatternType;
+  timeframe: TimeframeType;
+  points: {
+    X: { price: number; timestamp: string };
+    A: { price: number; timestamp: string };
+    B: { price: number; timestamp: string };
+    C: { price: number; timestamp: string };
+    D: { price: number; timestamp: string };
+  };
+  ratios: HarmonicRatio[];
+  completion: number; // 0-100 percentage complete
+  prz: { // Potential Reversal Zone
+    high: number;
+    low: number;
+    centerPrice: number;
+  };
+  targets: {
+    target1: number;
+    target2: number;
+    stopLoss: number;
+  };
+  validity: number; // 0-100 how close ratios are to ideal
+  confidence: number; // 0-100
+  status: 'FORMING' | 'COMPLETED' | 'ACTIVATED' | 'FAILED';
+}
+
+export interface VolumeNode {
+  price: number;
+  volume: number;
+  percentage: number; // percentage of total volume
+  type: VolumeProfileType;
+  significance: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+}
+
+export interface VolumeProfile {
+  id: string;
+  timeframe: TimeframeType;
+  period: {
+    start: string;
+    end: string;
+    bars: number;
+  };
+  poc: VolumeNode; // Point of Control
+  valueArea: {
+    high: VolumeNode;
+    low: VolumeNode;
+    volumePercentage: number; // typically 70%
+  };
+  volumeNodes: VolumeNode[];
+  profileShape: 'NORMAL' | 'B_SHAPE' | 'P_SHAPE' | 'D_SHAPE' | 'DOUBLE_DISTRIBUTION';
+  marketStructure: {
+    balanced: boolean;
+    trending: boolean;
+    rotational: boolean;
+  };
+  tradingImplications: {
+    support: number[];
+    resistance: number[];
+    fairValue: number;
+    acceptance: boolean; // price accepted at current levels
+  };
+}
+
+export interface ClassicPattern {
+  id: string;
+  type: 'HEAD_AND_SHOULDERS' | 'INVERSE_HEAD_AND_SHOULDERS' | 'DOUBLE_TOP' | 'DOUBLE_BOTTOM' | 
+        'TRIPLE_TOP' | 'TRIPLE_BOTTOM' | 'ASCENDING_TRIANGLE' | 'DESCENDING_TRIANGLE' | 
+        'SYMMETRICAL_TRIANGLE' | 'WEDGE_RISING' | 'WEDGE_FALLING' | 'FLAG_BULLISH' | 'FLAG_BEARISH' |
+        'PENNANT_BULLISH' | 'PENNANT_BEARISH' | 'CUP_AND_HANDLE' | 'INVERSE_CUP_AND_HANDLE';
+  timeframe: TimeframeType;
+  points: Array<{ price: number; timestamp: string; role: string }>;
+  completion: number; // 0-100
+  breakoutPrice: number;
+  targets: {
+    target1: number;
+    target2: number;
+    stopLoss: number;
+  };
+  volume: {
+    patternVolume: 'INCREASING' | 'DECREASING' | 'NEUTRAL';
+    breakoutVolume: 'CONFIRMED' | 'WEAK' | 'PENDING';
+  };
+  reliability: number; // 0-100
+  status: 'FORMING' | 'COMPLETED' | 'BROKEN_OUT' | 'FAILED';
+}
+
+export interface AdvancedPatternContext {
+  timeframe: TimeframeType;
+  analysisTimestamp: string;
+  wyckoffAnalysis?: WyckoffAnalysis;
+  elliottWaveAnalysis?: ElliottWaveAnalysis;
+  harmonicPatterns: HarmonicPattern[];
+  volumeProfile?: VolumeProfile;
+  classicPatterns: ClassicPattern[];
+  patternConfluence: {
+    bullishSignals: number;
+    bearishSignals: number;
+    neutralSignals: number;
+    overallBias: 'BULLISH' | 'BEARISH' | 'NEUTRAL' | 'MIXED';
+    confidenceScore: number; // 0-100
+  };
+  tradingImplications: {
+    primaryPattern: string;
+    direction: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+    entryZone: { high: number; low: number };
+    targets: number[];
+    stopLoss: number;
+    riskReward: number;
+    timeHorizon: 'SHORT_TERM' | 'MEDIUM_TERM' | 'LONG_TERM';
+  };
+  conflictingPatterns: string[];
+  marketCondition: {
+    trend: 'STRONG_UPTREND' | 'WEAK_UPTREND' | 'SIDEWAYS' | 'WEAK_DOWNTREND' | 'STRONG_DOWNTREND';
+    volatility: 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME';
+    phase: 'ACCUMULATION' | 'MARKUP' | 'DISTRIBUTION' | 'MARKDOWN' | 'REACCUMULATION' | 'REDISTRIBUTION';
+  };
+}
+
 export interface AnalysisResult {
   thinkingProcess: string; // The step-by-step analysis in Markdown.
   summary: string;
@@ -196,6 +420,9 @@ export interface AnalysisResult {
   // Smart Money Concepts fields
   smcAnalysis?: SMCAnalysisContext;
   hasSMCAnalysis?: boolean;
+  // Advanced Pattern Recognition fields
+  patternAnalysis?: AdvancedPatternContext;
+  hasAdvancedPatterns?: boolean;
 }
 
 export type MessageContent = string | AnalysisResult;
