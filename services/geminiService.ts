@@ -308,6 +308,152 @@ const smcEnhancedAnalysisResultSchema = {
     required: ['thinkingProcess', 'summary', 'signal', 'confidence', 'trade', 'timeframe', 'riskRewardRatio', 'verificationSummary', 'overallConfidenceScore', 'smcAnalysis', 'hasSMCAnalysis']
 };
 
+const advancedPatternAnalysisResultSchema = {
+    type: Type.OBJECT,
+    properties: {
+        thinkingProcess: {
+            type: Type.STRING,
+            description: "A detailed, step-by-step advanced pattern analysis following the required process. This should be in Markdown format."
+        },
+        summary: {
+            type: Type.STRING,
+            description: "A concise summary of the overall advanced pattern analysis."
+        },
+        signal: {
+            type: Type.STRING,
+            enum: ['BUY', 'SELL', 'NEUTRAL'],
+            description: "The final trade signal based on advanced pattern analysis."
+        },
+        confidence: {
+            type: Type.STRING,
+            enum: ['HIGH', 'LOW'],
+            description: "The confidence level of the signal. HIGH if overallConfidenceScore >= 75, otherwise LOW."
+        },
+        trade: {
+            type: Type.OBJECT,
+            nullable: true,
+            description: "The trade details. Must be null if confidence is LOW or signal is NEUTRAL.",
+            properties: {
+                entryPrice: { type: Type.STRING },
+                takeProfit: { type: Type.STRING },
+                stopLoss: { type: Type.STRING }
+            }
+        },
+        timeframe: {
+            type: Type.STRING,
+            description: "The primary timeframe for trade execution (e.g., '4-Hour', '1-Day')."
+        },
+        riskRewardRatio: {
+            type: Type.STRING,
+            nullable: true,
+            description: "The calculated risk/reward ratio as a string (e.g., '2.5:1'). Must be null if no trade is provided."
+        },
+        verificationSummary: {
+            type: Type.STRING,
+            description: "A brief, critical self-assessment of the pattern analysis, noting any conflicting data or weaknesses."
+        },
+        overallConfidenceScore: {
+            type: Type.INTEGER,
+            description: "A final numerical confidence score from 0 to 100 based on advanced pattern analysis."
+        },
+        patternAnalysis: {
+            type: Type.OBJECT,
+            description: "Advanced pattern recognition analysis context.",
+            properties: {
+                wyckoffAnalysis: {
+                    type: Type.OBJECT,
+                    nullable: true,
+                    properties: {
+                        currentPhase: { 
+                            type: Type.STRING, 
+                            enum: ['ACCUMULATION_PHASE_A', 'ACCUMULATION_PHASE_B', 'ACCUMULATION_PHASE_C', 'ACCUMULATION_PHASE_D', 'ACCUMULATION_PHASE_E',
+                                   'DISTRIBUTION_PHASE_A', 'DISTRIBUTION_PHASE_B', 'DISTRIBUTION_PHASE_C', 'DISTRIBUTION_PHASE_D', 'DISTRIBUTION_PHASE_E',
+                                   'MARKUP', 'MARKDOWN', 'UNIDENTIFIED']
+                        },
+                        phaseProgress: { type: Type.INTEGER },
+                        confidence: { type: Type.INTEGER },
+                        nextExpectedMove: {
+                            type: Type.OBJECT,
+                            properties: {
+                                direction: { type: Type.STRING, enum: ['BULLISH', 'BEARISH', 'SIDEWAYS'] },
+                                probability: { type: Type.INTEGER }
+                            }
+                        }
+                    }
+                },
+                elliottWaveAnalysis: {
+                    type: Type.OBJECT,
+                    nullable: true,
+                    properties: {
+                        currentWave: { 
+                            type: Type.STRING, 
+                            enum: ['IMPULSE_1', 'IMPULSE_3', 'IMPULSE_5', 'CORRECTIVE_2', 'CORRECTIVE_4', 'CORRECTIVE_A', 'CORRECTIVE_B', 'CORRECTIVE_C', 'COMPLETE_CYCLE', 'EXTENDED_WAVE']
+                        },
+                        waveProgress: { type: Type.INTEGER },
+                        confidence: { type: Type.INTEGER },
+                        nextExpectedWave: { 
+                            type: Type.STRING, 
+                            enum: ['IMPULSE_1', 'IMPULSE_3', 'IMPULSE_5', 'CORRECTIVE_2', 'CORRECTIVE_4', 'CORRECTIVE_A', 'CORRECTIVE_B', 'CORRECTIVE_C', 'COMPLETE_CYCLE', 'EXTENDED_WAVE']
+                        }
+                    }
+                },
+                harmonicPatterns: {
+                    type: Type.ARRAY,
+                    items: {
+                        type: Type.OBJECT,
+                        properties: {
+                            type: { 
+                                type: Type.STRING, 
+                                enum: ['GARTLEY_BULLISH', 'GARTLEY_BEARISH', 'BUTTERFLY_BULLISH', 'BUTTERFLY_BEARISH', 'BAT_BULLISH', 'BAT_BEARISH', 'CRAB_BULLISH', 'CRAB_BEARISH', 'CYPHER_BULLISH', 'CYPHER_BEARISH', 'SHARK_BULLISH', 'SHARK_BEARISH', 'DEEP_CRAB_BULLISH', 'DEEP_CRAB_BEARISH']
+                            },
+                            completion: { type: Type.INTEGER },
+                            validity: { type: Type.INTEGER },
+                            confidence: { type: Type.INTEGER },
+                            status: { type: Type.STRING, enum: ['FORMING', 'COMPLETED', 'ACTIVATED', 'FAILED'] }
+                        }
+                    }
+                },
+                volumeProfile: {
+                    type: Type.OBJECT,
+                    nullable: true,
+                    properties: {
+                        pocPrice: { type: Type.STRING },
+                        valueAreaHigh: { type: Type.STRING },
+                        valueAreaLow: { type: Type.STRING },
+                        profileShape: { type: Type.STRING, enum: ['NORMAL', 'B_SHAPE', 'P_SHAPE', 'D_SHAPE', 'DOUBLE_DISTRIBUTION'] }
+                    }
+                },
+                classicPatterns: {
+                    type: Type.ARRAY,
+                    items: {
+                        type: Type.OBJECT,
+                        properties: {
+                            type: { type: Type.STRING },
+                            completion: { type: Type.INTEGER },
+                            reliability: { type: Type.INTEGER },
+                            status: { type: Type.STRING, enum: ['FORMING', 'COMPLETED', 'BROKEN_OUT', 'FAILED'] }
+                        }
+                    }
+                },
+                patternConfluence: {
+                    type: Type.OBJECT,
+                    properties: {
+                        overallBias: { type: Type.STRING, enum: ['BULLISH', 'BEARISH', 'NEUTRAL', 'MIXED'] },
+                        confidenceScore: { type: Type.INTEGER },
+                        bullishSignals: { type: Type.INTEGER },
+                        bearishSignals: { type: Type.INTEGER }
+                    }
+                }
+            }
+        },
+        hasAdvancedPatterns: {
+            type: Type.BOOLEAN,
+            description: "Flag indicating this analysis includes advanced pattern recognition."
+        }
+    },
+    required: ['thinkingProcess', 'summary', 'signal', 'confidence', 'trade', 'timeframe', 'riskRewardRatio', 'verificationSummary', 'overallConfidenceScore', 'patternAnalysis', 'hasAdvancedPatterns']
+};
+
 
 const SYSTEM_INSTRUCTION = `You are Wizz, an elite crypto chart analyst. Your analysis must be precise, quantitative, and strictly confined to the visual data in the chart. Your goal is reproducibility and self-awareness.
 
@@ -618,6 +764,160 @@ const SMC_ULTRA_SYSTEM_INSTRUCTION = `You are Wizz Ultra SMC, the pinnacle of Sm
 - **Intermarket SMC Analysis:** Cross-asset Smart Money flow correlation
 
 Your Ultra SMC analysis must demonstrate institutional-level understanding of market structure with complete transparency on Smart Money positioning and intent.`;
+
+const ADVANCED_PATTERN_SYSTEM_INSTRUCTION = `You are Wizz Advanced Patterns, a master of institutional-grade pattern recognition specializing in Wyckoff Method, Elliott Wave Theory, Harmonic Patterns, and Volume Profile Analysis. You possess deep expertise in identifying complex market patterns that institutional traders use for superior market timing.
+
+**ADVANCED PATTERN ANALYSIS PROCESS:**
+
+**STEP 1: Wyckoff Method Analysis**
+1. **Phase Identification:** Determine current Wyckoff phase
+   - **Accumulation Phases:** A (PS, SC, AR, ST), B (ST tests), C (Spring/Test), D (LPS, BU), E (SOS)
+   - **Distribution Phases:** A (PSY, BC, AR, ST), B (UT tests), C (UTAD/Test), D (LPSY, BU), E (SOW)
+   - **Trending Phases:** Markup (bullish trend), Markdown (bearish trend)
+
+2. **Volume Analysis:** Assess effort vs. result relationship
+   - Climactic volume on reversal attempts
+   - Volume drying up in consolidation phases
+   - Volume confirmation on breakouts
+
+3. **Price Action Assessment:**
+   - Narrowing spread in late phases
+   - Wide spread on climactic action
+   - Test quality and volume characteristics
+
+**STEP 2: Elliott Wave Analysis**
+1. **Wave Identification:** Count Elliott Wave sequence
+   - **Impulse Waves:** 1, 3, 5 (trending direction)
+   - **Corrective Waves:** 2, 4, A, B, C (counter-trend)
+   - **Wave Relationships:** Fibonacci ratios and proportions
+
+2. **Degree Classification:** Determine wave degree based on timeframe
+   - Supercycle, Cycle, Primary, Intermediate, Minor, Minute levels
+
+3. **Projection Calculations:**
+   - Fibonacci retracements (23.6%, 38.2%, 50%, 61.8%, 78.6%)
+   - Fibonacci extensions (100%, 127.2%, 161.8%, 261.8%)
+   - Invalidation levels for wave counts
+
+**STEP 3: Harmonic Pattern Detection**
+1. **Pattern Classification:** Identify harmonic patterns with precise ratios
+   - **Gartley:** AB=61.8% XA, BC=38.2-88.6% AB, CD=127.2% BC, AD=78.6% XA
+   - **Butterfly:** AB=78.6% XA, BC=38.2-88.6% AB, CD=161.8-261.8% BC, AD=127.2-161.8% XA
+   - **Bat:** AB=38.2-50% XA, BC=38.2-88.6% AB, CD=161.8-261.8% BC, AD=88.6% XA
+   - **Crab:** AB=38.2-61.8% XA, BC=38.2-88.6% AB, CD=224-361.8% BC, AD=161.8% XA
+   - **Cypher:** AB=38.2-61.8% XA, BC=113-141.4% XA, CD=78.6% XC, AD=78.6% XA
+   - **Shark:** AB=38.2-61.8% XA, BC=113-161.8% XA, CD=161.8-224% BC, AD=88.6-113% XA
+
+2. **PRZ Analysis:** Define Potential Reversal Zone
+   - Confluence of multiple Fibonacci levels
+   - RSI divergence and momentum confirmation
+   - Volume characteristics at completion
+
+**STEP 4: Volume Profile Analysis**
+1. **Distribution Analysis:** Examine volume at price levels
+   - **Point of Control (POC):** Highest volume price level
+   - **Value Area:** 70% of volume distribution (VAH, VAL)
+   - **Volume Nodes:** High and low volume areas
+
+2. **Profile Shape Classification:**
+   - **Normal Distribution:** Bell curve shape
+   - **P-Shape:** Poor high, excess at bottom
+   - **B-Shape:** Poor low, excess at top
+   - **D-Shape:** Trending market profile
+
+3. **Market Auction Theory:**
+   - Balance vs. imbalance conditions
+   - Acceptance vs. rejection at price levels
+   - Rotation vs. directional movement
+
+**STEP 5: Classic Pattern Recognition**
+1. **Reversal Patterns:** Head & Shoulders, Double/Triple Tops/Bottoms
+2. **Continuation Patterns:** Triangles, Flags, Pennants, Wedges
+3. **Breakout Patterns:** Rectangles, Channels, Cup & Handle
+
+**STEP 6: Pattern Confluence Analysis**
+1. **Multi-Pattern Alignment:** Identify confluences across pattern types
+2. **Timeframe Synchronization:** Ensure patterns align across timeframes
+3. **Conflict Resolution:** Address contradictory signals
+
+**STEP 7: Risk-Reward Optimization**
+1. **Entry Zone Definition:** Use pattern completion levels
+2. **Target Calculation:** Multiple target levels from different patterns
+3. **Stop Loss Placement:** Structural invalidation levels
+4. **Position Sizing:** Based on pattern reliability and confluence
+
+**ENHANCED TRADING RULES FOR ADVANCED PATTERNS:**
+- Require confluence of at least 2 pattern types for high-confidence signals
+- Use Wyckoff phase context to filter Elliott Wave and Harmonic entries
+- Volume profile POC and Value Area for entry refinement
+- Enhanced R:R requirements: 2.5:1 minimum for pattern trades
+- Pattern reliability scoring based on historical success rates
+
+Your analysis must demonstrate mastery of institutional pattern recognition with precise measurements, confluence identification, and clear trading implications.`;
+
+const ADVANCED_PATTERN_ULTRA_SYSTEM_INSTRUCTION = `You are Wizz Ultra Advanced Patterns, the absolute pinnacle of institutional pattern recognition. You combine the most sophisticated pattern analysis methodologies with rigorous multi-pass verification to achieve institutional-grade accuracy.
+
+**ULTRA ADVANCED PATTERN ANALYSIS PROCESS:**
+
+**PASS 1: Comprehensive Multi-Pattern Identification**
+1. **Advanced Wyckoff Analysis:**
+   - **Composite Operator Theory:** Identify smart money accumulation/distribution
+   - **Effort vs. Result Analysis:** Detailed volume-price relationship assessment
+   - **Phase Transition Signals:** Early identification of phase changes
+   - **Cause and Effect Measurements:** Count-based price projections
+
+2. **Master Elliott Wave Analysis:**
+   - **Multi-Degree Wave Counts:** Analyze multiple wave degrees simultaneously
+   - **Complex Corrections:** Identify running, expanding, and irregular corrections
+   - **Extension Analysis:** Determine which impulse wave is extending
+   - **Alternate Count Development:** Provide primary and alternate wave scenarios
+
+3. **Precision Harmonic Analysis:**
+   - **Advanced Pattern Variations:** Deep Crab, Shark, Cypher variations
+   - **Nested Harmonics:** Patterns within patterns analysis
+   - **Harmonic Confluence Zones:** Multiple pattern completion areas
+   - **Time-Based Harmonics:** Incorporate time symmetry analysis
+
+4. **Professional Volume Profile:**
+   - **Multi-Timeframe Volume Analysis:** Composite volume profiles
+   - **Volume Delta Analysis:** Buying vs. selling pressure at levels
+   - **Auction Market Theory:** Advanced market structure concepts
+   - **Liquidity Analysis:** Institutional order flow implications
+
+**PASS 2: Cross-Validation & Conflict Resolution**
+1. **Pattern Hierarchy Assessment:** Determine dominant pattern signals
+2. **Timeframe Alignment Verification:** Ensure pattern confluence across timeframes
+3. **False Signal Filtering:** Eliminate low-probability setups
+4. **Risk-Adjusted Probability:** Calculate success probability with risk consideration
+
+**PASS 3: Ultra-Precise Signal Generation**
+1. **Institutional-Grade Confluence:** Require 3+ pattern confirmations
+2. **Probabilistic Modeling:** Advanced statistical analysis of pattern success
+3. **Dynamic Risk Management:** Real-time risk adjustment based on pattern evolution
+4. **Professional Entry Sequencing:** Precise entry, scaling, and exit strategies
+
+**ULTRA PATTERN ACCEPTANCE CRITERIA:**
+- Minimum 85% pattern reliability score across all methodologies
+- Confluence of at least 3 different pattern types
+- Volume profile confirmation at entry levels
+- Clear structural invalidation with defined risk parameters
+- Require 3.0:1 minimum R:R ratio for Ultra pattern signals
+- Entry must be within top 10% of historical pattern success zones
+
+**MASTER-LEVEL PATTERN CONCEPTS:**
+- **Market Maker Manipulation Models:** Accumulation/Distribution cycles
+- **Institutional Order Flow Patterns:** Smart money positioning analysis
+- **Advanced Fibonacci Relationships:** Golden ratio applications beyond basics
+- **Time Cycle Analysis:** Seasonal and cyclical pattern timing
+- **Intermarket Pattern Analysis:** Cross-asset pattern confirmation
+
+**PROFESSIONAL RISK MANAGEMENT:**
+- **Pattern Degradation Monitoring:** Real-time pattern validity assessment
+- **Dynamic Stop Management:** Trailing stops based on pattern evolution
+- **Position Scaling Protocols:** Size adjustments based on pattern strength
+- **Portfolio Pattern Correlation:** Avoid over-concentration in similar patterns
+
+Your Ultra Advanced Pattern analysis must demonstrate master-level understanding of institutional trading methodologies with complete transparency on pattern probability, risk assessment, and professional execution strategies.`;
 
 
 // New function for multi-timeframe analysis
@@ -967,6 +1267,130 @@ export async function* analyzeSMCStream(
             const errorMessage = `Details: ${error instanceof Error ? error.message : String(error)}`;
             if (hasImages) {
                 yield `{"error": "Could not retrieve SMC analysis. ${errorMessage}"}`;
+            } else {
+                yield `Sorry, I encountered an error and could not respond. Please try again. ${errorMessage}`;
+            }
+        }
+    }
+}
+
+// New function for Advanced Pattern analysis
+export async function* analyzeAdvancedPatternsStream(
+    history: ChatMessage[], 
+    prompt: string, 
+    images: ImageData[], 
+    signal: AbortSignal, 
+    isUltraMode: boolean
+): AsyncGenerator<string> {
+    const turnBasedHistory = history
+        .filter(msg => msg.role === 'user' || (msg.role === 'assistant' && msg.rawResponse))
+        .map(msg => {
+            if (msg.role === 'assistant') {
+                return {
+                    role: 'model' as const,
+                    parts: [{ text: msg.rawResponse! }]
+                };
+            }
+            
+            const userParts: ({text: string} | {inlineData: {mimeType: string, data: string}})[] = [];
+            if (typeof msg.content === 'string' && msg.content.trim()) {
+                userParts.push({ text: msg.content });
+            }
+
+            // Support both legacy single image and new multiple images
+            const imageUrls: string[] = [];
+            if (Array.isArray(msg.images) && msg.images.length > 0) {
+                imageUrls.push(...msg.images);
+            } else if ((msg as any).image) {
+                imageUrls.push((msg as any).image as string);
+            }
+
+            for (const url of imageUrls) {
+                const imgParts = url.split(';base64,');
+                if (imgParts.length === 2) {
+                    const mimeType = imgParts[0].split(':')[1];
+                    const data = imgParts[1];
+                    if (mimeType && data) {
+                        userParts.push({
+                            inlineData: {
+                                mimeType: mimeType,
+                                data: data,
+                            },
+                        });
+                    }
+                }
+            }
+
+            return {
+                role: 'user' as const,
+                parts: userParts,
+            };
+    }).filter(turn => turn.parts.length > 0);
+
+    // Create enhanced prompt with Advanced Pattern context
+    const enhancedPrompt = `${prompt}\n\n**ADVANCED PATTERN ANALYSIS REQUEST**\n\nPlease provide a comprehensive advanced pattern analysis including:\n- Wyckoff Method phase identification and volume analysis\n- Elliott Wave count with Fibonacci projections\n- Harmonic pattern detection with precise ratios\n- Volume profile analysis with POC and value areas\n- Classic pattern recognition\n- Pattern confluence assessment\n\nEnsure all patterns are precisely measured and confluence zones are clearly identified with their trading implications.`;
+
+    const currentUserParts: any[] = [{ text: enhancedPrompt }];
+    if (Array.isArray(images) && images.length > 0) {
+        for (const img of images) {
+            currentUserParts.push({
+                inlineData: {
+                    mimeType: img.mimeType,
+                    data: img.data,
+                },
+            });
+        }
+    }
+
+    const contents = [
+        ...turnBasedHistory,
+        { role: 'user', parts: currentUserParts }
+    ];
+
+    const hasImages = Array.isArray(images) && images.length > 0;
+
+    const modelConfig = hasImages
+        ? { // Advanced Pattern Analysis config for chart images
+            systemInstruction: isUltraMode ? ADVANCED_PATTERN_ULTRA_SYSTEM_INSTRUCTION : ADVANCED_PATTERN_SYSTEM_INSTRUCTION,
+            temperature: 0,
+            topK: 1,
+            topP: 1,
+            seed: 42,
+            responseMimeType: 'application/json',
+            responseSchema: advancedPatternAnalysisResultSchema,
+        }
+        : { // Conversational config for text-only prompts
+            systemInstruction: isUltraMode ? CONVERSATIONAL_SYSTEM_INSTRUCTION_ULTRA : CONVERSATIONAL_SYSTEM_INSTRUCTION,
+            temperature: 0,
+            topK: 1,
+            topP: 1,
+            seed: 42,
+        };
+
+    try {
+        const responseStream = await ai.models.generateContentStream({
+            model: hasImages ? 'gemini-2.5-pro' : 'gemini-2.5-flash', // Use Pro for Advanced Pattern analysis
+            contents: contents,
+            config: modelConfig as any,
+        });
+        
+        for await (const chunk of responseStream) {
+            if (signal.aborted) {
+                console.log('Advanced Pattern stream generation aborted by user.');
+                break;
+            }
+            const textChunk = (chunk as any)?.text;
+            if (typeof textChunk === 'string' && textChunk.length > 0) {
+                yield textChunk;
+            }
+        }
+
+    } catch (error) {
+        if (!(error instanceof Error && error.name === 'AbortError')) {
+            console.error("Error during Advanced Pattern Gemini stream:", error);
+            const errorMessage = `Details: ${error instanceof Error ? error.message : String(error)}`;
+            if (hasImages) {
+                yield `{"error": "Could not retrieve Advanced Pattern analysis. ${errorMessage}"}`;
             } else {
                 yield `Sorry, I encountered an error and could not respond. Please try again. ${errorMessage}`;
             }

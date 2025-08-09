@@ -85,6 +85,53 @@ export function applyPostProcessingGates(result: AnalysisResult, isUltraMode: bo
     }
   }
 
+  // Advanced Pattern-specific gating
+  if (result.hasAdvancedPatterns && result.patternAnalysis) {
+    const patternScore = result.patternAnalysis.patternConfluence?.confidenceScore || 50;
+    
+    if (isUltraMode) {
+      // Ultra Pattern: Maximum precision requirements
+      const minScoreForTrade = 85;
+      const minRR = 3.0; // Ultra-enhanced for Pattern trades
+      const minPatternConfidence = 85;
+
+      if (gated.signal === "NEUTRAL" || gated.confidence === "LOW") {
+        gated.trade = null;
+        gated.riskRewardRatio = null as any;
+        return gated;
+      }
+
+      if (score < minScoreForTrade || !hasValidTrade || rr === null || rr < minRR || patternScore < minPatternConfidence) {
+        gated.signal = "NEUTRAL";
+        gated.trade = null;
+        gated.riskRewardRatio = null as any;
+        return gated;
+      }
+
+      return gated;
+    } else {
+      // Normal Pattern mode
+      const minScoreForTrade = 75;
+      const minRR = 2.5; // Enhanced for Pattern trades
+      const minPatternConfidence = 75;
+
+      if (gated.signal === "NEUTRAL" || gated.confidence === "LOW") {
+        gated.trade = null;
+        gated.riskRewardRatio = null as any;
+        return gated;
+      }
+
+      if (score < minScoreForTrade || !hasValidTrade || rr === null || rr < minRR || patternScore < minPatternConfidence) {
+        gated.signal = "NEUTRAL";
+        gated.trade = null;
+        gated.riskRewardRatio = null as any;
+        return gated;
+      }
+
+      return gated;
+    }
+  }
+
   // Multi-timeframe specific gating
   if (result.isMultiTimeframeAnalysis && result.multiTimeframeContext) {
     const confluenceScore = result.multiTimeframeContext.confluenceScore;

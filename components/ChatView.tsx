@@ -2,7 +2,7 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import type { ChatMessage, ImageData, AnalysisResult, MessageContent, TimeframeImageData } from '../types';
 import { ChatInput } from './ChatInput';
 import { Message } from './Message';
-import { analyzeChartStream, analyzeMultiTimeframeStream, analyzeSMCStream } from '../services/geminiService';
+import { analyzeChartStream, analyzeMultiTimeframeStream, analyzeSMCStream, analyzeAdvancedPatternsStream } from '../services/geminiService';
 import { useSession } from '../contexts/SessionContext';
 import { EmptyChat } from './EmptyChat';
 import { buildCacheKey } from '../services/determinismService';
@@ -483,6 +483,151 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode }) => {
         setIsLoading(false);
         abortControllerRef.current = null;
     }
+     }, [activeSession, updateSession, updateSessionTitle, isUltraMode]);
+
+  const handleSendAdvancedPatternMessage = useCallback(async (prompt: string, images: ImageData[]) => {
+    if (!activeSession || (!prompt && (!images || images.length === 0))) return;
+    
+    const imageHashes = (images || []).map(i => i.hash!).filter(Boolean);
+    const promptVersion = 'pattern_p1'; // Pattern prompt version
+    const modelVersion = 'gemini-2.5-pro'; // Always use Pro for Advanced Patterns
+    const cacheKey = imageHashes.length > 0 ? buildCacheKey({ imageHashes, promptVersion, modelVersion, ultra: isUltraMode }) : '';
+
+    // Check cache for Pattern analysis
+    if (imageHashes.length > 0) {
+      const cached = getCache(cacheKey);
+      if (cached) {
+        const assistantMessageId = `msg_${Date.now() + 1}`;
+        const assistantMessage: ChatMessage = {
+          id: assistantMessageId,
+          role: 'assistant',
+          content: JSON.parse(cached.raw) as AnalysisResult,
+          thinkingText: (JSON.parse(cached.raw) as AnalysisResult).thinkingProcess,
+          rawResponse: cached.raw,
+        };
+        const messagesWithUser: ChatMessage[] = [...activeSession.messages, {
+          id: `msg_${Date.now()}`,
+          role: 'user',
+          content: prompt,
+          ...(images && images.length > 0 && { images: images.map(img => `data:${img.mimeType};base64,${img.data}`) }),
+          ...(imageHashes.length > 0 && { imageHashes }),
+        }];
+        updateSession(activeSession.id, { messages: [...messagesWithUser, assistantMessage] });
+        return;
+      }
+    }
+
+    abortControllerRef.current = new AbortController();
+    setIsLoading(true);
+
+    const userMessage: ChatMessage = {
+      id: `msg_${Date.now()}`,
+      role: 'user',
+      content: prompt,
+      ...(images && images.length > 0 && { images: images.map(img => `data:${img.mimeType};base64,${img.data}`) }),
+      ...(imageHashes.length > 0 && { imageHashes }),
+    };
+
+    const assistantMessageId = `msg_${Date.now() + 1}`;
+    const assistantMessage: ChatMessage = {
+      id: assistantMessageId,
+      role: 'assistant',
+      content: '',
+    };
+    
+    const messagesWithUser = [...activeSession.messages, userMessage];
+    updateSession(activeSession.id, { messages: messagesWithUser });
+    
+    const messagesWithAssistant = [...messagesWithUser, assistantMessage];
+    updateSession(activeSession.id, { messages: messagesWithAssistant });
+
+    let fullResponseText = '';
+    try {
+        const stream = analyzeAdvancedPatternsStream(activeSession.messages, prompt, images, abortControllerRef.current.signal, isUltraMode);
+        for await (const chunk of stream) {
+            if (abortControllerRef.current?.signal.aborted) break;
+            fullResponseText += chunk;
+        }
+
+        const finalSessionState = useSession.getState().sessions.find(s => s.id === activeSession.id);
+        if (!finalSessionState) return;
+
+        const finalAssistantMsgIndex = finalSessionState.messages.findIndex(m => m.id === assistantMessageId);
+        if (finalAssistantMsgIndex === -1) return;
+
+        const updatedMessages = [...finalSessionState.messages];
+
+        if (abortControllerRef.current?.signal.aborted) {
+            updatedMessages[finalAssistantMsgIndex].content = "Advanced Pattern analysis stopped by user.";
+            updateSession(activeSession.id, { messages: updatedMessages });
+            return;
+        }
+        
+        let finalContent: MessageContent;
+        let thinkingText = '';
+
+        if (images && images.length > 0) {
+            try {
+                const parsedJson = JSON.parse(sanitizeJsonResponse(fullResponseText));
+                if (parsedJson.error) {
+                    finalContent = `Error: ${parsedJson.error}`;
+                } else {
+                    const gated = applyPostProcessingGates(parsedJson as AnalysisResult, isUltraMode);
+                    finalContent = gated as AnalysisResult;
+                    thinkingText = gated.thinkingProcess;
+                    
+                    // Cache Pattern analysis
+                    if (imageHashes.length > 0) {
+                      setCache(cacheKey, {
+                        signal: gated.signal,
+                        confidence: ((gated.overallConfidenceScore ?? 50) / 100),
+                        raw: JSON.stringify(gated),
+                        modelVersion,
+                        promptVersion,
+                        ultra: isUltraMode,
+                      });
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to parse Advanced Pattern JSON response:', error);
+                finalContent = `Unable to parse the Advanced Pattern analysis response. Raw response: ${fullResponseText.substring(0, 500)}...`;
+            }
+        } else {
+            finalContent = fullResponseText; // Conversational response
+        }
+
+        updatedMessages[finalAssistantMsgIndex] = {
+            ...updatedMessages[finalAssistantMsgIndex],
+            content: finalContent,
+            ...(thinkingText && { thinkingText }),
+            rawResponse: fullResponseText,
+        };
+
+        updateSession(activeSession.id, { messages: updatedMessages });
+
+        // Generate title for first message
+        if (finalSessionState.messages.length === 2 && typeof finalContent === 'object' && 'summary' in finalContent) {
+            const title = finalContent.summary?.substring(0, 50) + (finalContent.summary && finalContent.summary.length > 50 ? '...' : '') || 'Pattern Analysis';
+            updateSessionTitle(activeSession.id, title);
+        } else if (finalSessionState.messages.length === 2) {
+            updateSessionTitle(activeSession.id, 'Pattern Chat');
+        }
+        
+    } catch (error) {
+        console.error('Error in Advanced Pattern analysis:', error);
+        const finalSessionState = useSession.getState().sessions.find(s => s.id === activeSession.id);
+        if (finalSessionState) {
+            const finalAssistantMsgIndex = finalSessionState.messages.findIndex(m => m.id === assistantMessageId);
+            if (finalAssistantMsgIndex !== -1) {
+                const updatedMessages = [...finalSessionState.messages];
+                updatedMessages[finalAssistantMsgIndex].content = `Sorry, I encountered an error during Advanced Pattern analysis. Please try again.`;
+                updateSession(activeSession.id, { messages: updatedMessages });
+            }
+        }
+    } finally {
+        setIsLoading(false);
+        abortControllerRef.current = null;
+    }
   }, [activeSession, updateSession, updateSessionTitle, isUltraMode]);
 
   const handleRegenerateResponse = useCallback(async () => {
@@ -656,6 +801,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode }) => {
             onSendMessage={handleSendMessage}
             onSendMultiTimeframeMessage={handleSendMultiTimeframeMessage}
             onSendSMCMessage={handleSendSMCMessage}
+            onSendAdvancedPatternMessage={handleSendAdvancedPatternMessage}
             isLoading={isLoading} 
             onStopGeneration={handleStopGeneration}
             initialPrompt={initialPrompt.text}
