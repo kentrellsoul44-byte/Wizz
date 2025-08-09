@@ -7,6 +7,7 @@ import { useSession } from '../contexts/SessionContext';
 import { EmptyChat } from './EmptyChat';
 import { buildCacheKey } from '../services/determinismService';
 import { getCache, setCache } from '../services/cacheService';
+import { intelligentCache } from '../services/intelligentCacheService';
 import { applyPostProcessingGates } from '../services/postProcessingService';
 
 function sanitizeJsonResponse(text: string): string {
@@ -57,17 +58,17 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode }) => {
     const modelVersion = isUltraMode ? 'gemini-2.5-pro' : 'gemini-2.5-flash';
     const cacheKey = imageHashes.length > 0 ? buildCacheKey({ imageHashes, promptVersion, modelVersion, ultra: isUltraMode }) : '';
 
-    // If analyzing images and cache exists, short-circuit
+    // Check intelligent cache for analysis result
     if (imageHashes.length > 0) {
-      const cached = getCache(cacheKey);
-      if (cached) {
+      const cachedResult = intelligentCache.getCachedAnalysis(imageHashes, promptVersion, modelVersion, isUltraMode);
+      if (cachedResult) {
         const assistantMessageId = `msg_${Date.now() + 1}`;
         const assistantMessage: ChatMessage = {
           id: assistantMessageId,
           role: 'assistant',
-          content: JSON.parse(cached.raw) as AnalysisResult,
-          thinkingText: (JSON.parse(cached.raw) as AnalysisResult).thinkingProcess,
-          rawResponse: cached.raw,
+          content: cachedResult,
+          thinkingText: cachedResult.thinkingProcess,
+          rawResponse: JSON.stringify(cachedResult),
         };
         const messagesWithUser: ChatMessage[] = [...activeSession.messages, {
           id: `msg_${Date.now()}`,
@@ -140,8 +141,11 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode }) => {
                     const gated = applyPostProcessingGates(parsedJson as AnalysisResult, isUltraMode);
                     finalContent = gated as AnalysisResult;
                     thinkingText = gated.thinkingProcess;
-                    // cache exact duplicate image hashes
+                    // Cache with intelligent cache system
                     if (imageHashes.length > 0) {
+                      intelligentCache.cacheAnalysis(imageHashes, promptVersion, modelVersion, isUltraMode, 'STANDARD', gated);
+                      
+                      // Also update legacy cache for backward compatibility
                       setCache(cacheKey, {
                         signal: gated.signal,
                         confidence: ((gated.overallConfidenceScore ?? 50) / 100),
@@ -203,17 +207,17 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode }) => {
     const modelVersion = isUltraMode ? 'gemini-2.5-pro' : 'gemini-2.5-flash';
     const cacheKey = imageHashes.length > 0 ? buildCacheKey({ imageHashes, promptVersion, modelVersion, ultra: isUltraMode }) : '';
 
-    // Check cache for multi-timeframe analysis
+    // Check intelligent cache for multi-timeframe analysis
     if (imageHashes.length > 0) {
-      const cached = getCache(cacheKey);
-      if (cached) {
+      const cachedResult = intelligentCache.getCachedAnalysis(imageHashes, promptVersion, modelVersion, isUltraMode);
+      if (cachedResult) {
         const assistantMessageId = `msg_${Date.now() + 1}`;
         const assistantMessage: ChatMessage = {
           id: assistantMessageId,
           role: 'assistant',
-          content: JSON.parse(cached.raw) as AnalysisResult,
-          thinkingText: (JSON.parse(cached.raw) as AnalysisResult).thinkingProcess,
-          rawResponse: cached.raw,
+          content: cachedResult,
+          thinkingText: cachedResult.thinkingProcess,
+          rawResponse: JSON.stringify(cachedResult),
         };
         const messagesWithUser: ChatMessage[] = [...activeSession.messages, {
           id: `msg_${Date.now()}`,
@@ -286,8 +290,11 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode }) => {
                     finalContent = gated as AnalysisResult;
                     thinkingText = gated.thinkingProcess;
                     
-                    // Cache multi-timeframe analysis
+                    // Cache multi-timeframe analysis with intelligent cache
                     if (imageHashes.length > 0) {
+                      intelligentCache.cacheAnalysis(imageHashes, promptVersion, modelVersion, isUltraMode, 'MULTI_TIMEFRAME', gated);
+                      
+                      // Also update legacy cache for backward compatibility
                       setCache(cacheKey, {
                         signal: gated.signal,
                         confidence: ((gated.overallConfidenceScore ?? 50) / 100),
@@ -348,17 +355,17 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode }) => {
     const modelVersion = 'gemini-2.5-pro'; // Always use Pro for SMC
     const cacheKey = imageHashes.length > 0 ? buildCacheKey({ imageHashes, promptVersion, modelVersion, ultra: isUltraMode }) : '';
 
-    // Check cache for SMC analysis
+    // Check intelligent cache for SMC analysis
     if (imageHashes.length > 0) {
-      const cached = getCache(cacheKey);
-      if (cached) {
+      const cachedResult = intelligentCache.getCachedAnalysis(imageHashes, promptVersion, modelVersion, isUltraMode);
+      if (cachedResult) {
         const assistantMessageId = `msg_${Date.now() + 1}`;
         const assistantMessage: ChatMessage = {
           id: assistantMessageId,
           role: 'assistant',
-          content: JSON.parse(cached.raw) as AnalysisResult,
-          thinkingText: (JSON.parse(cached.raw) as AnalysisResult).thinkingProcess,
-          rawResponse: cached.raw,
+          content: cachedResult,
+          thinkingText: cachedResult.thinkingProcess,
+          rawResponse: JSON.stringify(cachedResult),
         };
         const messagesWithUser: ChatMessage[] = [...activeSession.messages, {
           id: `msg_${Date.now()}`,
@@ -431,8 +438,11 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode }) => {
                     finalContent = gated as AnalysisResult;
                     thinkingText = gated.thinkingProcess;
                     
-                    // Cache SMC analysis
+                    // Cache SMC analysis with intelligent cache
                     if (imageHashes.length > 0) {
+                      intelligentCache.cacheAnalysis(imageHashes, promptVersion, modelVersion, isUltraMode, 'SMC', gated);
+                      
+                      // Also update legacy cache for backward compatibility
                       setCache(cacheKey, {
                         signal: gated.signal,
                         confidence: ((gated.overallConfidenceScore ?? 50) / 100),
@@ -493,17 +503,17 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode }) => {
     const modelVersion = 'gemini-2.5-pro'; // Always use Pro for Advanced Patterns
     const cacheKey = imageHashes.length > 0 ? buildCacheKey({ imageHashes, promptVersion, modelVersion, ultra: isUltraMode }) : '';
 
-    // Check cache for Pattern analysis
+    // Check intelligent cache for Pattern analysis
     if (imageHashes.length > 0) {
-      const cached = getCache(cacheKey);
-      if (cached) {
+      const cachedResult = intelligentCache.getCachedAnalysis(imageHashes, promptVersion, modelVersion, isUltraMode);
+      if (cachedResult) {
         const assistantMessageId = `msg_${Date.now() + 1}`;
         const assistantMessage: ChatMessage = {
           id: assistantMessageId,
           role: 'assistant',
-          content: JSON.parse(cached.raw) as AnalysisResult,
-          thinkingText: (JSON.parse(cached.raw) as AnalysisResult).thinkingProcess,
-          rawResponse: cached.raw,
+          content: cachedResult,
+          thinkingText: cachedResult.thinkingProcess,
+          rawResponse: JSON.stringify(cachedResult),
         };
         const messagesWithUser: ChatMessage[] = [...activeSession.messages, {
           id: `msg_${Date.now()}`,
@@ -576,8 +586,11 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode }) => {
                     finalContent = gated as AnalysisResult;
                     thinkingText = gated.thinkingProcess;
                     
-                    // Cache Pattern analysis
+                    // Cache Pattern analysis with intelligent cache
                     if (imageHashes.length > 0) {
+                      intelligentCache.cacheAnalysis(imageHashes, promptVersion, modelVersion, isUltraMode, 'ADVANCED_PATTERN', gated);
+                      
+                      // Also update legacy cache for backward compatibility
                       setCache(cacheKey, {
                         signal: gated.signal,
                         confidence: ((gated.overallConfidenceScore ?? 50) / 100),
