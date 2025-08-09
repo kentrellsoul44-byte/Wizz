@@ -38,6 +38,53 @@ export function applyPostProcessingGates(result: AnalysisResult, isUltraMode: bo
   const rr = parseRiskReward(result.riskRewardRatio);
   const hasValidTrade = isValidTradeStructure(result);
 
+  // SMC-specific gating
+  if (result.hasSMCAnalysis && result.smcAnalysis) {
+    const smcScore = result.smcAnalysis.tradingBias.confidence;
+    
+    if (isUltraMode) {
+      // Ultra SMC: Maximum precision requirements
+      const minScoreForTrade = 85;
+      const minRR = 2.8; // Ultra-enhanced for SMC
+      const minSMCConfidence = 80;
+
+      if (gated.signal === "NEUTRAL" || gated.confidence === "LOW") {
+        gated.trade = null;
+        gated.riskRewardRatio = null as any;
+        return gated;
+      }
+
+      if (score < minScoreForTrade || !hasValidTrade || rr === null || rr < minRR || smcScore < minSMCConfidence) {
+        gated.signal = "NEUTRAL";
+        gated.trade = null;
+        gated.riskRewardRatio = null as any;
+        return gated;
+      }
+
+      return gated;
+    } else {
+      // Normal SMC mode
+      const minScoreForTrade = 75;
+      const minRR = 2.2; // Enhanced for SMC
+      const minSMCConfidence = 70;
+
+      if (gated.signal === "NEUTRAL" || gated.confidence === "LOW") {
+        gated.trade = null;
+        gated.riskRewardRatio = null as any;
+        return gated;
+      }
+
+      if (score < minScoreForTrade || !hasValidTrade || rr === null || rr < minRR || smcScore < minSMCConfidence) {
+        gated.signal = "NEUTRAL";
+        gated.trade = null;
+        gated.riskRewardRatio = null as any;
+        return gated;
+      }
+
+      return gated;
+    }
+  }
+
   // Multi-timeframe specific gating
   if (result.isMultiTimeframeAnalysis && result.multiTimeframeContext) {
     const confluenceScore = result.multiTimeframeContext.confluenceScore;

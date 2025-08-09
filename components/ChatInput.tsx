@@ -10,6 +10,7 @@ import { MultiTimeframeInput } from './MultiTimeframeInput';
 interface ChatInputProps {
   onSendMessage: (prompt: string, images: ImageData[]) => void;
   onSendMultiTimeframeMessage?: (prompt: string, timeframeImages: TimeframeImageData[]) => void;
+  onSendSMCMessage?: (prompt: string, images: ImageData[]) => void;
   isLoading: boolean;
   onStopGeneration: () => void;
   initialPrompt?: string;
@@ -45,6 +46,7 @@ const fileToImageData = async (file: File): Promise<ImageData> => {
 export const ChatInput: React.FC<ChatInputProps> = ({ 
   onSendMessage, 
   onSendMultiTimeframeMessage,
+  onSendSMCMessage,
   isLoading, 
   onStopGeneration, 
   initialPrompt, 
@@ -56,6 +58,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [isUltraMenuOpen, setIsUltraMenuOpen] = useState(false);
   const [isMultiTimeframeMode, setIsMultiTimeframeMode] = useState(false);
+  const [isSMCMode, setIsSMCMode] = useState(false);
   const [timeframeImages, setTimeframeImages] = useState<TimeframeImageData[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
@@ -138,6 +141,23 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         onSendMultiTimeframeMessage(prompt.trim(), timeframeImages);
         setPrompt('');
         setTimeframeImages([]);
+      }
+    } else if (isSMCMode) {
+      if ((!prompt.trim() && imageFiles.length === 0) || isLoading) return;
+
+      let imagesData: ImageData[] = [];
+      if (imageFiles.length > 0) {
+          imagesData = await Promise.all(imageFiles.map(fileToImageData));
+      }
+      
+      if (onSendSMCMessage) {
+        onSendSMCMessage(prompt, imagesData);
+        setPrompt('');
+        setImageFiles([]);
+        setImagePreviews([]);
+        if(fileInputRef.current) {
+            fileInputRef.current.value = "";
+        }
       }
     } else {
       if ((!prompt.trim() && imageFiles.length === 0) || isLoading) return;
@@ -239,29 +259,54 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                             </label>
                         </div>
                         
-                        <div className="flex items-center justify-between border-t border-border-color pt-3">
-                            <div>
-                                <h4 className="font-semibold text-text-primary">Multi-Timeframe</h4>
-                                <p className="text-xs text-text-secondary">Analyze multiple timeframes</p>
-                            </div>
-                            <label htmlFor="multi-timeframe-toggle" className="relative inline-flex items-center cursor-pointer">
-                                <input 
-                                    type="checkbox" 
-                                    id="multi-timeframe-toggle" 
-                                    className="sr-only peer" 
-                                    checked={isMultiTimeframeMode} 
-                                    onChange={(e) => setIsMultiTimeframeMode(e.target.checked)} 
-                                />
-                                <div className="w-11 h-6 bg-border-color peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-offset-2 peer-focus:ring-accent-blue peer-focus:ring-offset-sidebar-bg rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-blue"></div>
-                            </label>
-                        </div>
+                                                 <div className="flex items-center justify-between border-t border-border-color pt-3">
+                             <div>
+                                 <h4 className="font-semibold text-text-primary">Multi-Timeframe</h4>
+                                 <p className="text-xs text-text-secondary">Analyze multiple timeframes</p>
+                             </div>
+                             <label htmlFor="multi-timeframe-toggle" className="relative inline-flex items-center cursor-pointer">
+                                 <input 
+                                     type="checkbox" 
+                                     id="multi-timeframe-toggle" 
+                                     className="sr-only peer" 
+                                     checked={isMultiTimeframeMode} 
+                                     onChange={(e) => {
+                                       setIsMultiTimeframeMode(e.target.checked);
+                                       if (e.target.checked) setIsSMCMode(false);
+                                     }} 
+                                 />
+                                 <div className="w-11 h-6 bg-border-color peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-offset-2 peer-focus:ring-accent-blue peer-focus:ring-offset-sidebar-bg rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-blue"></div>
+                             </label>
+                         </div>
+                         
+                         <div className="flex items-center justify-between border-t border-border-color pt-3">
+                             <div>
+                                 <h4 className="font-semibold text-text-primary">Smart Money Concepts</h4>
+                                 <p className="text-xs text-text-secondary">Advanced SMC analysis</p>
+                             </div>
+                             <label htmlFor="smc-toggle" className="relative inline-flex items-center cursor-pointer">
+                                 <input 
+                                     type="checkbox" 
+                                     id="smc-toggle" 
+                                     className="sr-only peer" 
+                                     checked={isSMCMode} 
+                                     onChange={(e) => {
+                                       setIsSMCMode(e.target.checked);
+                                       if (e.target.checked) setIsMultiTimeframeMode(false);
+                                     }} 
+                                 />
+                                 <div className="w-11 h-6 bg-border-color peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-offset-2 peer-focus:ring-accent-blue peer-focus:ring-offset-sidebar-bg rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-blue"></div>
+                             </label>
+                         </div>
                     </div>
-                    <p className="text-xs text-text-secondary mt-2 border-t border-border-color pt-2">
-                        {isMultiTimeframeMode 
-                            ? 'Upload charts from different timeframes (1H, 4H, 1D) for better confluence analysis.'
-                            : 'Provides a more detailed, multi-pass analysis for higher accuracy.'
-                        }
-                    </p>
+                                         <p className="text-xs text-text-secondary mt-2 border-t border-border-color pt-2">
+                         {isMultiTimeframeMode 
+                             ? 'Upload charts from different timeframes (1H, 4H, 1D) for better confluence analysis.'
+                             : isSMCMode
+                             ? 'Advanced Smart Money Concepts analysis with order blocks, FVGs, and liquidity detection.'
+                             : 'Provides a more detailed, multi-pass analysis for higher accuracy.'
+                         }
+                     </p>
                 </div>
             )}
         </div>

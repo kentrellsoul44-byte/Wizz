@@ -173,6 +173,141 @@ const multiTimeframeAnalysisResultSchema = {
     required: ['thinkingProcess', 'summary', 'signal', 'confidence', 'trade', 'timeframe', 'riskRewardRatio', 'verificationSummary', 'overallConfidenceScore', 'multiTimeframeContext', 'isMultiTimeframeAnalysis']
 };
 
+const smcEnhancedAnalysisResultSchema = {
+    type: Type.OBJECT,
+    properties: {
+        thinkingProcess: {
+            type: Type.STRING,
+            description: "A detailed, step-by-step SMC-enhanced analysis following the required process. This should be in Markdown format."
+        },
+        summary: {
+            type: Type.STRING,
+            description: "A concise summary of the overall SMC analysis."
+        },
+        signal: {
+            type: Type.STRING,
+            enum: ['BUY', 'SELL', 'NEUTRAL'],
+            description: "The final trade signal based on Smart Money Concepts analysis."
+        },
+        confidence: {
+            type: Type.STRING,
+            enum: ['HIGH', 'LOW'],
+            description: "The confidence level of the signal. HIGH if overallConfidenceScore >= 75, otherwise LOW."
+        },
+        trade: {
+            type: Type.OBJECT,
+            nullable: true,
+            description: "The trade details. Must be null if confidence is LOW or signal is NEUTRAL.",
+            properties: {
+                entryPrice: { type: Type.STRING },
+                takeProfit: { type: Type.STRING },
+                stopLoss: { type: Type.STRING }
+            }
+        },
+        timeframe: {
+            type: Type.STRING,
+            description: "The primary timeframe for trade execution (e.g., '4-Hour', '1-Day')."
+        },
+        riskRewardRatio: {
+            type: Type.STRING,
+            nullable: true,
+            description: "The calculated risk/reward ratio as a string (e.g., '2.5:1'). Must be null if no trade is provided."
+        },
+        verificationSummary: {
+            type: Type.STRING,
+            description: "A brief, critical self-assessment of the SMC analysis, noting any conflicting data or weaknesses."
+        },
+        overallConfidenceScore: {
+            type: Type.INTEGER,
+            description: "A final numerical confidence score from 0 to 100 based on Smart Money Concepts analysis."
+        },
+        smcAnalysis: {
+            type: Type.OBJECT,
+            description: "Smart Money Concepts analysis context and structure information.",
+            properties: {
+                overallStructure: {
+                    type: Type.STRING,
+                    enum: ['BULLISH_STRUCTURE', 'BEARISH_STRUCTURE', 'RANGING', 'TRANSITIONAL'],
+                    description: "The overall market structure based on SMC analysis."
+                },
+                dominantTimeframe: {
+                    type: Type.STRING,
+                    description: "The timeframe that provides the dominant structure bias."
+                },
+                criticalLevels: {
+                    type: Type.OBJECT,
+                    properties: {
+                        orderBlocks: {
+                            type: Type.ARRAY,
+                            items: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    type: { type: Type.STRING, enum: ['BULLISH_OB', 'BEARISH_OB'] },
+                                    price: { type: Type.STRING },
+                                    strength: { type: Type.STRING, enum: ['WEAK', 'MODERATE', 'STRONG', 'VERY_STRONG'] },
+                                    mitigated: { type: Type.BOOLEAN },
+                                    notes: { type: Type.STRING }
+                                }
+                            }
+                        },
+                        fairValueGaps: {
+                            type: Type.ARRAY,
+                            items: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    type: { type: Type.STRING, enum: ['BULLISH_FVG', 'BEARISH_FVG'] },
+                                    priceRange: { type: Type.STRING },
+                                    filled: { type: Type.BOOLEAN },
+                                    significance: { type: Type.STRING, enum: ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] }
+                                }
+                            }
+                        },
+                        liquidityLevels: {
+                            type: Type.ARRAY,
+                            items: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    price: { type: Type.STRING },
+                                    type: { type: Type.STRING, enum: ['BUY_SIDE_LIQUIDITY', 'SELL_SIDE_LIQUIDITY', 'BOTH_SIDES'] },
+                                    swept: { type: Type.BOOLEAN },
+                                    significance: { type: Type.STRING, enum: ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] }
+                                }
+                            }
+                        }
+                    }
+                },
+                tradingBias: {
+                    type: Type.OBJECT,
+                    properties: {
+                        direction: { type: Type.STRING, enum: ['BULLISH', 'BEARISH', 'NEUTRAL'] },
+                        confidence: { type: Type.INTEGER },
+                        reasoning: { type: Type.STRING },
+                        invalidationLevel: { type: Type.STRING }
+                    }
+                },
+                displacement: {
+                    type: Type.OBJECT,
+                    properties: {
+                        detected: { type: Type.BOOLEAN },
+                        direction: { type: Type.STRING, enum: ['BULLISH', 'BEARISH'], nullable: true },
+                        strength: { type: Type.STRING, enum: ['WEAK', 'MODERATE', 'STRONG', 'EXPLOSIVE'], nullable: true }
+                    }
+                },
+                marketPhase: {
+                    type: Type.STRING,
+                    enum: ['ACCUMULATION', 'DISTRIBUTION', 'MARKUP', 'MARKDOWN', 'REACCUMULATION', 'REDISTRIBUTION'],
+                    description: "Current market phase based on Smart Money Concepts."
+                }
+            }
+        },
+        hasSMCAnalysis: {
+            type: Type.BOOLEAN,
+            description: "Flag indicating this analysis includes Smart Money Concepts."
+        }
+    },
+    required: ['thinkingProcess', 'summary', 'signal', 'confidence', 'trade', 'timeframe', 'riskRewardRatio', 'verificationSummary', 'overallConfidenceScore', 'smcAnalysis', 'hasSMCAnalysis']
+};
+
 
 const SYSTEM_INSTRUCTION = `You are Wizz, an elite crypto chart analyst. Your analysis must be precise, quantitative, and strictly confined to the visual data in the chart. Your goal is reproducibility and self-awareness.
 
@@ -351,6 +486,138 @@ For each timeframe:
 - -20 points if higher timeframe opposes signal
 
 Your analysis must demonstrate institutional-grade multi-timeframe thinking with complete transparency on how timeframes interact.`;
+
+const SMC_SYSTEM_INSTRUCTION = `You are Wizz SMC, an elite Smart Money Concepts analyst specializing in institutional-grade market structure analysis. You utilize advanced Smart Money Concepts (SMC) to identify order blocks, Fair Value Gaps (FVGs), breaker blocks, and liquidity sweeps for superior trading signals.
+
+**SMART MONEY CONCEPTS ANALYSIS PROCESS:**
+
+**STEP 1: Market Structure Assessment**
+1. **Structure Identification:** Determine current market structure (Bullish Structure, Bearish Structure, Ranging, Transitional)
+   - Bullish Structure: Higher Highs (HH) + Higher Lows (HL)
+   - Bearish Structure: Lower Highs (LH) + Lower Lows (LL)
+   - Ranging: Sideways movement with equal highs/lows
+   - Transitional: Structure in the process of changing
+
+2. **Structure Shifts:** Identify any Change of Character (CHoCH) or Market Structure Breaks (MSB)
+   - CHoCH: Break of previous structure with confirmation
+   - MSB: Strong structural break indicating trend change
+
+**STEP 2: Order Block Detection**
+1. **Bullish Order Blocks:** Identify strong bullish candles that preceded significant upward moves
+   - Look for candles with strong rejection from lows
+   - Must be followed by immediate displacement higher
+   - Note if order block has been mitigated (price returned to OB zone)
+
+2. **Bearish Order Blocks:** Identify strong bearish candles that preceded significant downward moves
+   - Look for candles with strong rejection from highs
+   - Must be followed by immediate displacement lower
+   - Note mitigation status
+
+**STEP 3: Fair Value Gap (FVG) Analysis**
+1. **Bullish FVGs:** Identify gaps where previous candle's high < next candle's low
+   - Measure gap size and significance
+   - Track fill status (unfilled, partially filled, completely filled)
+   - Assess probability of fill
+
+2. **Bearish FVGs:** Identify gaps where previous candle's low > next candle's high
+   - Evaluate gap characteristics and market context
+   - Determine if gap acts as support/resistance
+
+**STEP 4: Liquidity Analysis**
+1. **Equal Highs/Lows:** Identify areas of obvious liquidity
+   - Mark equal highs (Buy-Side Liquidity/BSL)
+   - Mark equal lows (Sell-Side Liquidity/SSL)
+   - Assess liquidity sweep potential
+
+2. **Liquidity Sweeps:** Detect areas where stops have been hunted
+   - False breakouts above/below obvious levels
+   - Rapid reversals after liquidity grabs
+   - Volume confirmation of sweeps
+
+**STEP 5: Breaker Block Identification**
+1. **Order Block Breaks:** Identify mitigated order blocks that broke structure
+2. **Polarity Changes:** Former support becoming resistance and vice versa
+3. **Retest Confirmation:** Look for retests of broken levels
+
+**STEP 6: Displacement Detection**
+1. **Strong Moves:** Identify rapid price movements with minimal retracement
+2. **Impulse vs. Correction:** Distinguish between impulsive moves and corrections
+3. **Displacement Strength:** Categorize as Weak, Moderate, Strong, or Explosive
+
+**STEP 7: Market Phase Analysis**
+1. **Accumulation:** Ranging after downtrend, absorption of supply
+2. **Markup:** Strong upward movement, demand exceeding supply
+3. **Distribution:** Ranging after uptrend, absorption of demand
+4. **Markdown:** Strong downward movement, supply exceeding demand
+5. **Re-accumulation/Re-distribution:** Secondary phases within trends
+
+**STEP 8: SMC Confluence Synthesis**
+1. **Level Confluence:** Areas where multiple SMC concepts align
+2. **Directional Bias:** Determine overall bias based on structure and SMC signals
+3. **Entry Optimization:** Identify optimal entry zones using SMC confluence
+4. **Risk Management:** Set stops based on structural invalidation levels
+
+**ENHANCED TRADING RULES FOR SMC:**
+- Only trade in direction of higher timeframe structure
+- Prefer entries at unmitigated order blocks with confluence
+- Use FVG fills as entry triggers in trending markets
+- Target liquidity levels as take-profit areas
+- Place stops beyond structural invalidation with liquidity consideration
+- Higher R:R requirements: 2.2:1 minimum for SMC entries
+
+Your analysis must include detailed SMC structure identification, confluence areas, and clear reasoning for all SMC-based signals.`;
+
+const SMC_ULTRA_SYSTEM_INSTRUCTION = `You are Wizz Ultra SMC, the pinnacle of Smart Money Concepts analysis. You combine the rigorous multi-pass verification of Ultra mode with the most sophisticated Smart Money Concepts analysis available.
+
+**ULTRA SMC ANALYSIS PROCESS:**
+
+**PASS 1: Comprehensive SMC Structure Analysis**
+1. **Multi-Layered Structure:** Analyze structure across multiple levels (Minor, Intermediate, Major)
+2. **Advanced Order Block Classification:**
+   - Institutional Order Blocks (high volume, strong displacement)
+   - Retail Order Blocks (lower significance)
+   - Nested Order Blocks (OBs within larger OBs)
+   - Refined Order Blocks (after mitigation and re-creation)
+
+3. **Enhanced FVG Analysis:**
+   - Macro FVGs (significant gaps with high impact)
+   - Micro FVGs (smaller intraday gaps)
+   - Nested FVGs (gaps within larger gaps)
+   - FVG confluence with other SMC concepts
+
+4. **Advanced Liquidity Mapping:**
+   - Daily/Weekly highs and lows
+   - Previous month/quarter extremes
+   - Trendline liquidity
+   - Internal Range Liquidity (IRL)
+   - External Range Liquidity (ERL)
+
+**PASS 2: SMC Cross-Validation & Conflict Resolution**
+1. **Multi-Timeframe SMC Alignment:** Ensure SMC signals align across timeframes
+2. **Conflicting Signals Analysis:** Identify and resolve SMC conflicts
+3. **False Signal Filtering:** Eliminate low-probability SMC setups
+4. **Adversarial SMC Testing:** Challenge SMC thesis with failure scenarios
+
+**PASS 3: Ultra-Precise SMC Signal Generation**
+1. **Institutional-Grade Confluence:** Require 3+ SMC concepts to align
+2. **Smart Money Flow Analysis:** Assess institutional vs retail positioning
+3. **Optimal Entry Sequencing:** Define precise entry, management, and exit strategy
+4. **Dynamic Risk Calibration:** Adjust position sizing based on SMC confluence strength
+
+**ULTRA SMC ACCEPTANCE CRITERIA:**
+- Minimum 80% SMC confluence score across all concepts
+- Higher timeframe structure must strongly support trade direction
+- Must have clear structural invalidation level
+- Require 2.8:1 minimum R:R ratio for SMC Ultra signals
+- Entry must be at high-probability SMC confluence zone
+
+**ADVANCED SMC CONCEPTS:**
+- **Market Maker Models:** Accumulation, Manipulation, Distribution cycles
+- **Institutional Order Flow:** Smart money accumulation/distribution patterns
+- **Seasonal Liquidity Patterns:** Time-based liquidity characteristics
+- **Intermarket SMC Analysis:** Cross-asset Smart Money flow correlation
+
+Your Ultra SMC analysis must demonstrate institutional-level understanding of market structure with complete transparency on Smart Money positioning and intent.`;
 
 
 // New function for multi-timeframe analysis
@@ -576,6 +843,130 @@ export async function* analyzeChartStream(history: ChatMessage[], prompt: string
             const errorMessage = `Details: ${error instanceof Error ? error.message : String(error)}`;
             if (hasImages) {
                 yield `{"error": "Could not retrieve analysis. ${errorMessage}"}`;
+            } else {
+                yield `Sorry, I encountered an error and could not respond. Please try again. ${errorMessage}`;
+            }
+        }
+    }
+}
+
+// New function for SMC-enhanced analysis
+export async function* analyzeSMCStream(
+    history: ChatMessage[], 
+    prompt: string, 
+    images: ImageData[], 
+    signal: AbortSignal, 
+    isUltraMode: boolean
+): AsyncGenerator<string> {
+    const turnBasedHistory = history
+        .filter(msg => msg.role === 'user' || (msg.role === 'assistant' && msg.rawResponse))
+        .map(msg => {
+            if (msg.role === 'assistant') {
+                return {
+                    role: 'model' as const,
+                    parts: [{ text: msg.rawResponse! }]
+                };
+            }
+            
+            const userParts: ({text: string} | {inlineData: {mimeType: string, data: string}})[] = [];
+            if (typeof msg.content === 'string' && msg.content.trim()) {
+                userParts.push({ text: msg.content });
+            }
+
+            // Support both legacy single image and new multiple images
+            const imageUrls: string[] = [];
+            if (Array.isArray(msg.images) && msg.images.length > 0) {
+                imageUrls.push(...msg.images);
+            } else if ((msg as any).image) {
+                imageUrls.push((msg as any).image as string);
+            }
+
+            for (const url of imageUrls) {
+                const imgParts = url.split(';base64,');
+                if (imgParts.length === 2) {
+                    const mimeType = imgParts[0].split(':')[1];
+                    const data = imgParts[1];
+                    if (mimeType && data) {
+                        userParts.push({
+                            inlineData: {
+                                mimeType: mimeType,
+                                data: data,
+                            },
+                        });
+                    }
+                }
+            }
+
+            return {
+                role: 'user' as const,
+                parts: userParts,
+            };
+    }).filter(turn => turn.parts.length > 0);
+
+    // Create enhanced prompt with SMC context
+    const enhancedPrompt = `${prompt}\n\n**SMART MONEY CONCEPTS ANALYSIS REQUEST**\n\nPlease provide a comprehensive Smart Money Concepts analysis including:\n- Market structure identification\n- Order block detection\n- Fair Value Gap analysis\n- Liquidity level mapping\n- Breaker block identification\n- Displacement analysis\n- Market phase assessment\n\nEnsure all SMC concepts are clearly identified and explained with their trading implications.`;
+
+    const currentUserParts: any[] = [{ text: enhancedPrompt }];
+    if (Array.isArray(images) && images.length > 0) {
+        for (const img of images) {
+            currentUserParts.push({
+                inlineData: {
+                    mimeType: img.mimeType,
+                    data: img.data,
+                },
+            });
+        }
+    }
+
+    const contents = [
+        ...turnBasedHistory,
+        { role: 'user', parts: currentUserParts }
+    ];
+
+    const hasImages = Array.isArray(images) && images.length > 0;
+
+    const modelConfig = hasImages
+        ? { // SMC Analysis config for chart images
+            systemInstruction: isUltraMode ? SMC_ULTRA_SYSTEM_INSTRUCTION : SMC_SYSTEM_INSTRUCTION,
+            temperature: 0,
+            topK: 1,
+            topP: 1,
+            seed: 42,
+            responseMimeType: 'application/json',
+            responseSchema: smcEnhancedAnalysisResultSchema,
+        }
+        : { // Conversational config for text-only prompts
+            systemInstruction: isUltraMode ? CONVERSATIONAL_SYSTEM_INSTRUCTION_ULTRA : CONVERSATIONAL_SYSTEM_INSTRUCTION,
+            temperature: 0,
+            topK: 1,
+            topP: 1,
+            seed: 42,
+        };
+
+    try {
+        const responseStream = await ai.models.generateContentStream({
+            model: hasImages ? 'gemini-2.5-pro' : 'gemini-2.5-flash', // Use Pro for SMC analysis
+            contents: contents,
+            config: modelConfig as any,
+        });
+        
+        for await (const chunk of responseStream) {
+            if (signal.aborted) {
+                console.log('SMC stream generation aborted by user.');
+                break;
+            }
+            const textChunk = (chunk as any)?.text;
+            if (typeof textChunk === 'string' && textChunk.length > 0) {
+                yield textChunk;
+            }
+        }
+
+    } catch (error) {
+        if (!(error instanceof Error && error.name === 'AbortError')) {
+            console.error("Error during SMC Gemini stream:", error);
+            const errorMessage = `Details: ${error instanceof Error ? error.message : String(error)}`;
+            if (hasImages) {
+                yield `{"error": "Could not retrieve SMC analysis. ${errorMessage}"}`;
             } else {
                 yield `Sorry, I encountered an error and could not respond. Please try again. ${errorMessage}`;
             }

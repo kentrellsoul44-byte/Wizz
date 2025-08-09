@@ -206,6 +206,157 @@ const AnalysisCard: React.FC<{ result: AnalysisResult }> = ({ result }) => {
                   </div>
               )}
 
+              {/* Smart Money Concepts Analysis */}
+              {result.hasSMCAnalysis && result.smcAnalysis && (
+                  <div>
+                      <h3 className="font-semibold text-text-primary mb-2">Smart Money Concepts Analysis</h3>
+                      <div className="bg-input-bg-50 p-3 rounded-lg space-y-3">
+                          {/* Market Structure */}
+                          <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                  <span className="text-sm font-medium text-text-secondary">Market Structure:</span>
+                                  <span className={`ml-2 px-2 py-1 rounded text-xs font-medium ${
+                                      result.smcAnalysis.overallStructure === 'BULLISH_STRUCTURE' ? 'bg-accent-green-10 text-accent-green' :
+                                      result.smcAnalysis.overallStructure === 'BEARISH_STRUCTURE' ? 'bg-accent-red-10 text-accent-red' :
+                                      result.smcAnalysis.overallStructure === 'RANGING' ? 'bg-accent-yellow-10 text-accent-yellow' :
+                                      'bg-input-bg text-text-secondary'
+                                  }`}>
+                                      {result.smcAnalysis.overallStructure.replace('_', ' ')}
+                                  </span>
+                              </div>
+                              <div>
+                                  <span className="text-sm font-medium text-text-secondary">Market Phase:</span>
+                                  <span className="ml-2 text-sm font-medium text-text-primary">
+                                      {result.smcAnalysis.marketPhase}
+                                  </span>
+                              </div>
+                          </div>
+
+                          {/* Trading Bias */}
+                          <div className="border-t border-border-color pt-3">
+                              <div className="flex justify-between items-center mb-2">
+                                  <span className="text-sm font-medium text-text-secondary">Trading Bias</span>
+                                  <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                      result.smcAnalysis.tradingBias.direction === 'BULLISH' ? 'bg-accent-green-10 text-accent-green' :
+                                      result.smcAnalysis.tradingBias.direction === 'BEARISH' ? 'bg-accent-red-10 text-accent-red' :
+                                      'bg-input-bg text-text-secondary'
+                                  }`}>
+                                      {result.smcAnalysis.tradingBias.direction}
+                                  </span>
+                              </div>
+                              <div className="flex justify-between items-center mb-1">
+                                  <span className="text-xs text-text-secondary">SMC Confidence:</span>
+                                  <span className="text-sm font-medium">{result.smcAnalysis.tradingBias.confidence}%</span>
+                              </div>
+                              <div className="w-full bg-border-color rounded-full h-2">
+                                  <div className="bg-accent-purple h-2 rounded-full" style={{ width: `${result.smcAnalysis.tradingBias.confidence}%` }}></div>
+                              </div>
+                              <p className="text-xs text-text-secondary mt-2">{result.smcAnalysis.tradingBias.reasoning}</p>
+                          </div>
+
+                          {/* Order Blocks */}
+                          {result.smcAnalysis.criticalLevels.orderBlocks && result.smcAnalysis.criticalLevels.orderBlocks.length > 0 && (
+                              <div className="border-t border-border-color pt-3">
+                                  <div className="text-sm font-medium text-text-secondary mb-2">Order Blocks</div>
+                                  <div className="space-y-2">
+                                      {result.smcAnalysis.criticalLevels.orderBlocks.map((ob, idx) => (
+                                          <div key={idx} className="flex justify-between items-center text-xs bg-input-bg p-2 rounded">
+                                              <div className="flex items-center space-x-2">
+                                                  <span className={`px-1.5 py-0.5 rounded ${
+                                                      ob.type === 'BULLISH_OB' ? 'bg-accent-green-10 text-accent-green' : 'bg-accent-red-10 text-accent-red'
+                                                  }`}>
+                                                      {ob.type === 'BULLISH_OB' ? 'Bull OB' : 'Bear OB'}
+                                                  </span>
+                                                  <span className="font-mono text-text-primary">{ob.price}</span>
+                                              </div>
+                                              <div className="flex items-center space-x-2">
+                                                  <span className={`text-xs ${ob.mitigated ? 'text-accent-red' : 'text-accent-green'}`}>
+                                                      {ob.mitigated ? 'Mitigated' : 'Active'}
+                                                  </span>
+                                                  <span className="text-text-secondary">{ob.strength}</span>
+                                              </div>
+                                          </div>
+                                      ))}
+                                  </div>
+                              </div>
+                          )}
+
+                          {/* Fair Value Gaps */}
+                          {result.smcAnalysis.criticalLevels.fairValueGaps && result.smcAnalysis.criticalLevels.fairValueGaps.length > 0 && (
+                              <div className="border-t border-border-color pt-3">
+                                  <div className="text-sm font-medium text-text-secondary mb-2">Fair Value Gaps</div>
+                                  <div className="space-y-2">
+                                      {result.smcAnalysis.criticalLevels.fairValueGaps.map((fvg, idx) => (
+                                          <div key={idx} className="flex justify-between items-center text-xs bg-input-bg p-2 rounded">
+                                              <div className="flex items-center space-x-2">
+                                                  <span className={`px-1.5 py-0.5 rounded ${
+                                                      fvg.type === 'BULLISH_FVG' ? 'bg-accent-green-10 text-accent-green' : 'bg-accent-red-10 text-accent-red'
+                                                  }`}>
+                                                      {fvg.type === 'BULLISH_FVG' ? 'Bull FVG' : 'Bear FVG'}
+                                                  </span>
+                                                  <span className="font-mono text-text-primary">{fvg.priceRange}</span>
+                                              </div>
+                                              <div className="flex items-center space-x-2">
+                                                  <span className={`text-xs ${fvg.filled ? 'text-accent-red' : 'text-accent-green'}`}>
+                                                      {fvg.filled ? 'Filled' : 'Open'}
+                                                  </span>
+                                                  <span className="text-text-secondary">{fvg.significance}</span>
+                                              </div>
+                                          </div>
+                                      ))}
+                                  </div>
+                              </div>
+                          )}
+
+                          {/* Liquidity Levels */}
+                          {result.smcAnalysis.criticalLevels.liquidityLevels && result.smcAnalysis.criticalLevels.liquidityLevels.length > 0 && (
+                              <div className="border-t border-border-color pt-3">
+                                  <div className="text-sm font-medium text-text-secondary mb-2">Liquidity Levels</div>
+                                  <div className="space-y-2">
+                                      {result.smcAnalysis.criticalLevels.liquidityLevels.map((liq, idx) => (
+                                          <div key={idx} className="flex justify-between items-center text-xs bg-input-bg p-2 rounded">
+                                              <div className="flex items-center space-x-2">
+                                                  <span className={`px-1.5 py-0.5 rounded ${
+                                                      liq.type === 'BUY_SIDE_LIQUIDITY' ? 'bg-accent-green-10 text-accent-green' : 
+                                                      liq.type === 'SELL_SIDE_LIQUIDITY' ? 'bg-accent-red-10 text-accent-red' :
+                                                      'bg-accent-yellow-10 text-accent-yellow'
+                                                  }`}>
+                                                      {liq.type === 'BUY_SIDE_LIQUIDITY' ? 'BSL' : liq.type === 'SELL_SIDE_LIQUIDITY' ? 'SSL' : 'Both'}
+                                                  </span>
+                                                  <span className="font-mono text-text-primary">{liq.price}</span>
+                                              </div>
+                                              <div className="flex items-center space-x-2">
+                                                  <span className={`text-xs ${liq.swept ? 'text-accent-red' : 'text-accent-green'}`}>
+                                                      {liq.swept ? 'Swept' : 'Active'}
+                                                  </span>
+                                                  <span className="text-text-secondary">{liq.significance}</span>
+                                              </div>
+                                          </div>
+                                      ))}
+                                  </div>
+                              </div>
+                          )}
+
+                          {/* Displacement */}
+                          {result.smcAnalysis.displacement.detected && (
+                              <div className="border-t border-border-color pt-3">
+                                  <div className="text-sm font-medium text-text-secondary mb-2">Displacement Detected</div>
+                                  <div className="flex justify-between items-center">
+                                      <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                          result.smcAnalysis.displacement.direction === 'BULLISH' ? 'bg-accent-green-10 text-accent-green' : 'bg-accent-red-10 text-accent-red'
+                                      }`}>
+                                          {result.smcAnalysis.displacement.direction} Displacement
+                                      </span>
+                                      <span className="text-sm font-medium text-text-primary">
+                                          {result.smcAnalysis.displacement.strength} Strength
+                                      </span>
+                                  </div>
+                              </div>
+                          )}
+                      </div>
+                  </div>
+              )}
+
               {/* Verification Section */}
               <div>
                   <h3 className="font-semibold text-text-primary mb-2">
