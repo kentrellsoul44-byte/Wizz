@@ -1,4 +1,6 @@
 import type { AnalysisResult } from "../types";
+import { DynamicRiskRewardService } from "./dynamicRiskRewardService";
+import { TradeTrackingService } from "./tradeTrackingService";
 
 function parseRiskReward(ratio?: string): number | null {
   if (!ratio) return null;
@@ -38,6 +40,24 @@ export function applyPostProcessingGates(result: AnalysisResult, isUltraMode: bo
   const rr = parseRiskReward(result.riskRewardRatio);
   const hasValidTrade = isValidTradeStructure(result);
 
+  // Get dynamic risk/reward requirements
+  const dynamicRRService = DynamicRiskRewardService.getInstance();
+  const tradeTrackingService = TradeTrackingService.getInstance();
+  const assetType = extractAssetType(result); // Extract from analysis context
+  const timeframe = (result.timeframe as any) || '1H'; // Default to 1H if not specified
+  const timestamp = new Date().toISOString();
+  
+  // Calculate dynamic R:R requirements
+  const dynamicRR = calculateDynamicRRRequirements(
+    result,
+    isUltraMode,
+    assetType,
+    timeframe,
+    timestamp,
+    dynamicRRService,
+    tradeTrackingService
+  );
+
   // SMC-specific gating
   if (result.hasSMCAnalysis && result.smcAnalysis) {
     const smcScore = result.smcAnalysis.tradingBias.confidence;
@@ -45,7 +65,7 @@ export function applyPostProcessingGates(result: AnalysisResult, isUltraMode: bo
     if (isUltraMode) {
       // Ultra SMC: Maximum precision requirements
       const minScoreForTrade = 85;
-      const minRR = 2.8; // Ultra-enhanced for SMC
+      const minRR = dynamicRR.ultraMode.minRR; // Dynamic R:R for Ultra SMC
       const minSMCConfidence = 80;
 
       if (gated.signal === "NEUTRAL" || gated.confidence === "LOW") {
@@ -65,7 +85,7 @@ export function applyPostProcessingGates(result: AnalysisResult, isUltraMode: bo
     } else {
       // Normal SMC mode
       const minScoreForTrade = 75;
-      const minRR = 2.2; // Enhanced for SMC
+      const minRR = dynamicRR.normalMode.minRR; // Dynamic R:R for Normal SMC
       const minSMCConfidence = 70;
 
       if (gated.signal === "NEUTRAL" || gated.confidence === "LOW") {
@@ -92,7 +112,7 @@ export function applyPostProcessingGates(result: AnalysisResult, isUltraMode: bo
     if (isUltraMode) {
       // Ultra Pattern: Maximum precision requirements
       const minScoreForTrade = 85;
-      const minRR = 3.0; // Ultra-enhanced for Pattern trades
+      const minRR = dynamicRR.ultraMode.minRR; // Dynamic R:R for Ultra Pattern trades
       const minPatternConfidence = 85;
 
       if (gated.signal === "NEUTRAL" || gated.confidence === "LOW") {
@@ -112,7 +132,7 @@ export function applyPostProcessingGates(result: AnalysisResult, isUltraMode: bo
     } else {
       // Normal Pattern mode
       const minScoreForTrade = 75;
-      const minRR = 2.5; // Enhanced for Pattern trades
+      const minRR = dynamicRR.normalMode.minRR; // Dynamic R:R for Normal Pattern trades
       const minPatternConfidence = 75;
 
       if (gated.signal === "NEUTRAL" || gated.confidence === "LOW") {
@@ -139,7 +159,7 @@ export function applyPostProcessingGates(result: AnalysisResult, isUltraMode: bo
     if (isUltraMode) {
       // Ultra multi-timeframe: Even stricter requirements
       const minScoreForTrade = 85;
-      const minRR = 2.5; // Enhanced for multi-timeframe ultra
+      const minRR = dynamicRR.ultraMode.minRR; // Dynamic R:R for Ultra multi-timeframe
       const minConfluence = 80;
 
       if (gated.signal === "NEUTRAL" || gated.confidence === "LOW") {
@@ -159,7 +179,7 @@ export function applyPostProcessingGates(result: AnalysisResult, isUltraMode: bo
     } else {
       // Normal multi-timeframe mode
       const minScoreForTrade = 75;
-      const minRR = 2.0; // Slightly higher for multi-timeframe
+      const minRR = dynamicRR.normalMode.minRR; // Dynamic R:R for Normal multi-timeframe
       const minConfluence = 70;
 
       if (gated.signal === "NEUTRAL" || gated.confidence === "LOW") {
@@ -183,7 +203,7 @@ export function applyPostProcessingGates(result: AnalysisResult, isUltraMode: bo
   if (isUltraMode) {
     // Ultra: 2x stricter
     const minScoreForTrade = 85;
-    const minRR = 2.2;
+    const minRR = dynamicRR.ultraMode.minRR; // Dynamic R:R for Ultra mode
 
     if (gated.signal === "NEUTRAL" || gated.confidence === "LOW") {
       gated.trade = null;
@@ -203,7 +223,7 @@ export function applyPostProcessingGates(result: AnalysisResult, isUltraMode: bo
   } else {
     // Normal mode gates
     const minScoreForTrade = 75;
-    const minRR = 1.8;
+    const minRR = dynamicRR.normalMode.minRR; // Dynamic R:R for Normal mode
 
     if (gated.signal === "NEUTRAL" || gated.confidence === "LOW") {
       gated.trade = null;
@@ -220,4 +240,88 @@ export function applyPostProcessingGates(result: AnalysisResult, isUltraMode: bo
 
     return gated;
   }
+}
+
+// Helper functions for dynamic R:R calculation
+
+function extractAssetType(result: AnalysisResult): string {
+  // Extract asset type from analysis context
+  // This is a simplified implementation - in practice, this would be extracted from the chart data or user input
+  if (result.summary.toLowerCase().includes('bitcoin') || result.summary.toLowerCase().includes('btc')) {
+    return 'BTC';
+  }
+  if (result.summary.toLowerCase().includes('ethereum') || result.summary.toLowerCase().includes('eth')) {
+    return 'ETH';
+  }
+  if (result.summary.toLowerCase().includes('eurusd') || result.summary.toLowerCase().includes('forex')) {
+    return 'EURUSD';
+  }
+  if (result.summary.toLowerCase().includes('gold') || result.summary.toLowerCase().includes('commodity')) {
+    return 'GOLD';
+  }
+  if (result.summary.toLowerCase().includes('stock') || result.summary.toLowerCase().includes('aapl')) {
+    return 'AAPL';
+  }
+  
+  // Default to crypto for unknown assets
+  return 'BTC';
+}
+
+function calculateDynamicRRRequirements(
+  result: AnalysisResult,
+  isUltraMode: boolean,
+  assetType: string,
+  timeframe: string,
+  timestamp: string,
+  dynamicRRService: DynamicRiskRewardService,
+  tradeTrackingService: TradeTrackingService
+): { normalMode: { minRR: number; optimalRR: number; maxRR: number }; ultraMode: { minRR: number; optimalRR: number; maxRR: number } } {
+  // Get base R:R requirements based on mode
+  const baseRR = isUltraMode ? 2.2 : 1.8;
+  
+  // Get asset profile
+  const assetProfile = dynamicRRService.getAssetProfile(assetType);
+  
+  // Calculate volatility metrics (simplified - in practice, this would use actual price data)
+  const volatilityMetrics = dynamicRRService.calculateVolatilityMetrics([], timeframe as any);
+  
+  // Analyze time patterns
+  const timePatterns = dynamicRRService.analyzeTimePatterns(timestamp, assetType);
+  
+  // Get historical performance from trade tracking service
+  const historicalPerformance = tradeTrackingService.getHistoricalPerformance(assetType, timeframe as any);
+  
+  // Calculate dynamic R:R for both modes
+  const normalModeRR = dynamicRRService.calculateDynamicRR(
+    baseRR,
+    volatilityMetrics,
+    assetProfile,
+    historicalPerformance,
+    timePatterns,
+    result.overallConfidenceScore,
+    false
+  );
+  
+  const ultraModeRR = dynamicRRService.calculateDynamicRR(
+    baseRR + 0.4, // Higher base for ultra mode
+    volatilityMetrics,
+    assetProfile,
+    historicalPerformance,
+    timePatterns,
+    result.overallConfidenceScore,
+    true
+  );
+  
+  return {
+    normalMode: {
+      minRR: normalModeRR.finalRecommendation.minRR,
+      optimalRR: normalModeRR.finalRecommendation.optimalRR,
+      maxRR: normalModeRR.finalRecommendation.maxRR
+    },
+    ultraMode: {
+      minRR: ultraModeRR.finalRecommendation.minRR,
+      optimalRR: ultraModeRR.finalRecommendation.optimalRR,
+      maxRR: ultraModeRR.finalRecommendation.maxRR
+    }
+  };
 }
