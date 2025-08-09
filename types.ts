@@ -526,3 +526,104 @@ export type Database = {
     }
   }
 }
+
+// Progressive Analysis Types
+export type AnalysisPhase = 'OVERVIEW' | 'DETAILED' | 'VERIFICATION';
+
+export interface ProgressiveAnalysisPhase {
+  phase: AnalysisPhase;
+  confidence: number; // 0-100
+  completionPercentage: number; // 0-100
+  estimatedTimeRemaining?: number; // milliseconds
+  timestamp: number;
+  phaseDescription: string;
+}
+
+export interface ProgressiveAnalysisResult extends AnalysisResult {
+  // Progressive analysis metadata
+  isProgressive: boolean;
+  currentPhase: AnalysisPhase;
+  phaseHistory: ProgressiveAnalysisPhase[];
+  overallProgress: number; // 0-100
+  
+  // Phase-specific data
+  overviewData?: Partial<AnalysisResult>; // Phase 1: Quick overview
+  detailedData?: Partial<AnalysisResult>; // Phase 2: Detailed analysis
+  verifiedData?: AnalysisResult; // Phase 3: Final verification
+  
+  // Progressive confidence tracking
+  phaseConfidence: {
+    overview: number; // ~30%
+    detailed: number; // ~70%
+    verified: number; // ~100%
+  };
+  
+  // Streaming metadata
+  streamingStatus: 'INITIALIZING' | 'STREAMING' | 'PAUSED' | 'COMPLETED' | 'ERROR';
+  nextPhaseAvailable: boolean;
+  canSkipToFinal: boolean;
+}
+
+export interface ProgressiveAnalysisConfig {
+  enableProgressive: boolean;
+  phaseTimeouts: {
+    overview: number; // milliseconds
+    detailed: number; // milliseconds
+    verification: number; // milliseconds
+  };
+  confidenceThresholds: {
+    overview: number; // ~30
+    detailed: number; // ~70
+    verification: number; // ~100
+  };
+  allowPhaseSkipping: boolean;
+  enablePhasePreview: boolean;
+  cachePhasesIndependently: boolean;
+}
+
+export interface ProgressiveStreamEvent {
+  type: 'PHASE_START' | 'PHASE_PROGRESS' | 'PHASE_COMPLETE' | 'PHASE_ERROR' | 'ANALYSIS_COMPLETE';
+  phase: AnalysisPhase;
+  data?: Partial<AnalysisResult>;
+  progress: number; // 0-100
+  confidence: number; // 0-100
+  timestamp: number;
+  metadata?: {
+    processingTime: number;
+    dataSize: number;
+    cacheHit: boolean;
+    errorDetails?: string;
+  };
+}
+
+export interface ProgressiveAnalysisState {
+  analysisId: string;
+  isActive: boolean;
+  currentPhase: AnalysisPhase;
+  phases: {
+    overview: {
+      status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'ERROR';
+      result?: Partial<AnalysisResult>;
+      startTime?: number;
+      endTime?: number;
+      confidence: number;
+    };
+    detailed: {
+      status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'ERROR';
+      result?: Partial<AnalysisResult>;
+      startTime?: number;
+      endTime?: number;
+      confidence: number;
+    };
+    verification: {
+      status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'ERROR';
+      result?: AnalysisResult;
+      startTime?: number;
+      endTime?: number;
+      confidence: number;
+    };
+  };
+  overallProgress: number;
+  estimatedTotalTime: number;
+  actualTotalTime?: number;
+}
