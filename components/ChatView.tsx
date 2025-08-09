@@ -1,8 +1,9 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import type { ChatMessage, ImageData, AnalysisResult, MessageContent, TimeframeImageData } from '../types';
+import type { ChatMessage, ImageData, AnalysisResult, MessageContent, TimeframeImageData, ProgressiveStreamEvent } from '../types';
 import { ChatInput } from './ChatInput';
 import { Message } from './Message';
 import { analyzeChartStream, analyzeMultiTimeframeStream, analyzeSMCStream, analyzeAdvancedPatternsStream } from '../services/geminiService';
+import { progressiveAnalysis } from '../services/progressiveAnalysisService';
 import { useSession } from '../contexts/SessionContext';
 import { EmptyChat } from './EmptyChat';
 import { buildCacheKey } from '../services/determinismService';
@@ -643,6 +644,167 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode }) => {
     }
   }, [activeSession, updateSession, updateSessionTitle, isUltraMode]);
 
+  const handleSendProgressiveMessage = useCallback(async (
+    prompt: string, 
+    images: ImageData[], 
+    analysisType: 'STANDARD' | 'MULTI_TIMEFRAME' | 'SMC' | 'ADVANCED_PATTERN'
+  ) => {
+    if (!activeSession || (!prompt && (!images || images.length === 0))) return;
+    
+    const imageHashes = (images || []).map(i => i.hash!).filter(Boolean);
+    const promptVersion = 'progressive_p1';
+    const modelVersion = isUltraMode ? 'gemini-2.5-pro' : 'gemini-2.5-flash';
+    const cacheKey = imageHashes.length > 0 ? buildCacheKey({ imageHashes, promptVersion, modelVersion, ultra: isUltraMode }) : '';
+
+    // Check intelligent cache for progressive analysis result
+    if (imageHashes.length > 0) {
+      const cachedResult = intelligentCache.getCachedAnalysis(imageHashes, promptVersion, modelVersion, isUltraMode);
+      if (cachedResult) {
+        const assistantMessageId = `msg_${Date.now() + 1}`;
+        const assistantMessage: ChatMessage = {
+          id: assistantMessageId,
+          role: 'assistant',
+          content: cachedResult,
+          thinkingText: cachedResult.thinkingProcess,
+          rawResponse: JSON.stringify(cachedResult),
+        };
+        const messagesWithUser: ChatMessage[] = [...activeSession.messages, {
+          id: `msg_${Date.now()}`,
+          role: 'user',
+          content: prompt,
+          ...(images && images.length > 0 && { images: images.map(img => `data:${img.mimeType};base64,${img.data}`) }),
+          ...(imageHashes.length > 0 && { imageHashes }),
+        }];
+        updateSession(activeSession.id, { messages: [...messagesWithUser, assistantMessage] });
+        return;
+      }
+    }
+
+    abortControllerRef.current = new AbortController();
+    setIsLoading(true);
+
+    const userMessage: ChatMessage = {
+      id: `msg_${Date.now()}`,
+      role: 'user',
+      content: prompt,
+      ...(images && images.length > 0 && { images: images.map(img => `data:${img.mimeType};base64,${img.data}`) }),
+      ...(imageHashes.length > 0 && { imageHashes }),
+    };
+
+    const assistantMessageId = `msg_${Date.now() + 1}`;
+    const assistantMessage: ChatMessage = {
+      id: assistantMessageId,
+      role: 'assistant',
+      content: '',
+      thinkingText: '',
+    };
+
+    const updatedMessages = [...activeSession.messages, userMessage, assistantMessage];
+    updateSession(activeSession.id, { messages: updatedMessages });
+
+    try {
+      // Start progressive analysis
+      const progressiveStream = progressiveAnalysis.startProgressiveAnalysis(
+        analysisType,
+        prompt,
+        images,
+        null, // timeframeImages - handled by analysisType
+        activeSession.messages,
+        isUltraMode,
+        abortControllerRef.current!.signal
+      );
+
+      let finalContent: AnalysisResult | string = '';
+      let thinkingText = '';
+      let currentPhase = 'INITIALIZING';
+
+      // Process progressive analysis events
+      for await (const event of progressiveStream) {
+        if (abortControllerRef.current?.signal.aborted) break;
+
+        const finalSessionState = useSession.getState().sessions.find(s => s.id === activeSession.id);
+        if (!finalSessionState) break;
+
+        const finalAssistantMsgIndex = finalSessionState.messages.findIndex(m => m.id === assistantMessageId);
+        if (finalAssistantMsgIndex === -1) break;
+
+        const updatedMessages = [...finalSessionState.messages];
+
+        switch (event.type) {
+          case 'PHASE_START':
+            currentPhase = event.phase;
+            thinkingText = `Starting ${event.phase.toLowerCase()} analysis...`;
+            break;
+
+          case 'PHASE_COMPLETE':
+            if (event.data) {
+              finalContent = event.data as AnalysisResult;
+              thinkingText = (event.data as AnalysisResult).thinkingProcess || `Completed ${event.phase.toLowerCase()} analysis (${event.confidence}% confidence)`;
+            }
+            break;
+
+          case 'ANALYSIS_COMPLETE':
+            if (event.data) {
+              finalContent = event.data as AnalysisResult;
+              thinkingText = (event.data as AnalysisResult).thinkingProcess || 'Progressive analysis completed';
+            }
+            break;
+
+          case 'PHASE_ERROR':
+            thinkingText = `Error in ${event.phase.toLowerCase()} phase: ${event.metadata?.errorDetails || 'Unknown error'}`;
+            break;
+        }
+
+        // Update message with current progress
+        updatedMessages[finalAssistantMsgIndex] = {
+          ...updatedMessages[finalAssistantMsgIndex],
+          content: finalContent,
+          thinkingText,
+        };
+
+        updateSession(activeSession.id, { messages: updatedMessages });
+      }
+
+      // Cache the final progressive analysis result
+      if (imageHashes.length > 0 && typeof finalContent === 'object' && 'summary' in finalContent) {
+        intelligentCache.cacheAnalysis(imageHashes, promptVersion, modelVersion, isUltraMode, analysisType, finalContent as AnalysisResult);
+        
+        // Also update legacy cache for backward compatibility
+        setCache(cacheKey, {
+          signal: (finalContent as AnalysisResult).signal,
+          confidence: ((finalContent as AnalysisResult).overallConfidenceScore ?? 50) / 100,
+          raw: JSON.stringify(finalContent),
+          modelVersion,
+          promptVersion,
+          ultra: isUltraMode,
+        });
+      }
+
+      // Generate title for first message
+      if (finalSessionState.messages.length === 2 && typeof finalContent === 'object' && 'summary' in finalContent) {
+        const title = finalContent.summary?.substring(0, 50) + (finalContent.summary && finalContent.summary.length > 50 ? '...' : '') || 'Progressive Analysis';
+        updateSessionTitle(activeSession.id, title);
+      } else if (finalSessionState.messages.length === 2) {
+        updateSessionTitle(activeSession.id, 'Progressive Chat');
+      }
+
+    } catch (error) {
+      console.error('Error in progressive analysis:', error);
+      const finalSessionState = useSession.getState().sessions.find(s => s.id === activeSession.id);
+      if (finalSessionState) {
+        const finalAssistantMsgIndex = finalSessionState.messages.findIndex(m => m.id === assistantMessageId);
+        if (finalAssistantMsgIndex !== -1) {
+          const updatedMessages = [...finalSessionState.messages];
+          updatedMessages[finalAssistantMsgIndex].content = `Sorry, I encountered an error during progressive analysis. Please try again.`;
+          updateSession(activeSession.id, { messages: updatedMessages });
+        }
+      }
+    } finally {
+      setIsLoading(false);
+      abortControllerRef.current = null;
+    }
+  }, [activeSession, updateSession, updateSessionTitle, isUltraMode]);
+
   const handleRegenerateResponse = useCallback(async () => {
     if (!activeSession || isLoading) return;
 
@@ -815,6 +977,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode }) => {
             onSendMultiTimeframeMessage={handleSendMultiTimeframeMessage}
             onSendSMCMessage={handleSendSMCMessage}
             onSendAdvancedPatternMessage={handleSendAdvancedPatternMessage}
+            onSendProgressiveMessage={handleSendProgressiveMessage}
             isLoading={isLoading} 
             onStopGeneration={handleStopGeneration}
             initialPrompt={initialPrompt.text}
