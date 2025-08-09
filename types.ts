@@ -41,6 +41,145 @@ export interface MultiTimeframeContext {
   conflictingSignals?: string[]; // Areas where timeframes disagree
 }
 
+// Smart Money Concepts (SMC) Types
+export type MarketStructureType = 'BULLISH_STRUCTURE' | 'BEARISH_STRUCTURE' | 'RANGING' | 'TRANSITIONAL';
+export type OrderBlockType = 'BULLISH_OB' | 'BEARISH_OB';
+export type FVGType = 'BULLISH_FVG' | 'BEARISH_FVG';
+export type BreakerBlockType = 'BULLISH_BREAKER' | 'BEARISH_BREAKER';
+export type LiquiditySweepType = 'BUY_SIDE_LIQUIDITY' | 'SELL_SIDE_LIQUIDITY' | 'BOTH_SIDES';
+
+export interface PriceLevel {
+  price: number;
+  timeframe: TimeframeType;
+  strength: 'WEAK' | 'MODERATE' | 'STRONG' | 'VERY_STRONG';
+  touched: number; // Number of times tested
+  lastTouch?: string; // ISO date string
+}
+
+export interface OrderBlock {
+  id: string;
+  type: OrderBlockType;
+  highPrice: number;
+  lowPrice: number;
+  originCandle: {
+    timestamp: string;
+    timeframe: TimeframeType;
+  };
+  mitigated: boolean;
+  mitigationPrice?: number;
+  mitigationTime?: string;
+  strength: 'WEAK' | 'MODERATE' | 'STRONG' | 'VERY_STRONG';
+  volume?: number;
+  notes?: string;
+}
+
+export interface FairValueGap {
+  id: string;
+  type: FVGType;
+  topPrice: number;
+  bottomPrice: number;
+  gapSize: number; // Size in price units
+  gapSizePercent: number; // Size as percentage
+  timeframe: TimeframeType;
+  creationTime: string;
+  filled: boolean;
+  fillPrice?: number;
+  fillTime?: string;
+  fillPercentage: number; // 0-100, how much of the gap has been filled
+  significance: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+}
+
+export interface BreakerBlock {
+  id: string;
+  type: BreakerBlockType;
+  originalOrderBlock: OrderBlock;
+  breakPrice: number;
+  breakTime: string;
+  retestPrice?: number;
+  retestTime?: string;
+  confirmed: boolean;
+  strength: 'WEAK' | 'MODERATE' | 'STRONG' | 'VERY_STRONG';
+}
+
+export interface LiquidityLevel {
+  id: string;
+  price: number;
+  type: LiquiditySweepType;
+  timeframe: TimeframeType;
+  significance: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  equalHighsLows: number; // Number of equal highs/lows at this level
+  swept: boolean;
+  sweepTime?: string;
+  sweepVolume?: number;
+  projection: {
+    targetPrice?: number;
+    probability: number; // 0-100
+  };
+}
+
+export interface MarketStructureShift {
+  id: string;
+  from: MarketStructureType;
+  to: MarketStructureType;
+  confirmationPrice: number;
+  confirmationTime: string;
+  timeframe: TimeframeType;
+  strength: 'WEAK' | 'MODERATE' | 'STRONG' | 'VERY_STRONG';
+  keyLevel: PriceLevel;
+}
+
+export interface SmartMoneyStructure {
+  timeframe: TimeframeType;
+  currentStructure: MarketStructureType;
+  structureShifts: MarketStructureShift[];
+  orderBlocks: OrderBlock[];
+  fairValueGaps: FairValueGap[];
+  breakerBlocks: BreakerBlock[];
+  liquidityLevels: LiquidityLevel[];
+  keyLevels: {
+    support: PriceLevel[];
+    resistance: PriceLevel[];
+  };
+  inducementLevels: PriceLevel[];
+  displacement: {
+    detected: boolean;
+    direction?: 'BULLISH' | 'BEARISH';
+    startPrice?: number;
+    endPrice?: number;
+    timeframe: TimeframeType;
+    strength?: 'WEAK' | 'MODERATE' | 'STRONG' | 'EXPLOSIVE';
+  };
+  marketPhase: 'ACCUMULATION' | 'DISTRIBUTION' | 'MARKUP' | 'MARKDOWN' | 'REACCUMULATION' | 'REDISTRIBUTION';
+}
+
+export interface SMCAnalysisContext {
+  overallStructure: MarketStructureType;
+  dominantTimeframe: TimeframeType;
+  structuresByTimeframe: SmartMoneyStructure[];
+  confluences: {
+    orderBlockConfluence: OrderBlock[];
+    fvgConfluence: FairValueGap[];
+    liquidityConfluence: LiquidityLevel[];
+  };
+  criticalLevels: {
+    highestProbabilityZones: PriceLevel[];
+    liquidityTargets: LiquidityLevel[];
+    structuralSupports: PriceLevel[];
+    structuralResistances: PriceLevel[];
+  };
+  tradingBias: {
+    direction: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+    confidence: number; // 0-100
+    reasoning: string;
+    invalidationLevel: number;
+  };
+  riskAssessment: {
+    liquidityRisks: string[];
+    structuralRisks: string[];
+    recommendations: string[];
+  };
+}
+
 export interface AnalysisResult {
   thinkingProcess: string; // The step-by-step analysis in Markdown.
   summary: string;
@@ -54,6 +193,9 @@ export interface AnalysisResult {
   // New multi-timeframe fields
   multiTimeframeContext?: MultiTimeframeContext;
   isMultiTimeframeAnalysis?: boolean;
+  // Smart Money Concepts fields
+  smcAnalysis?: SMCAnalysisContext;
+  hasSMCAnalysis?: boolean;
 }
 
 export type MessageContent = string | AnalysisResult;
