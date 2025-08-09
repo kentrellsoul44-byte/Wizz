@@ -38,6 +38,54 @@ export function applyPostProcessingGates(result: AnalysisResult, isUltraMode: bo
   const rr = parseRiskReward(result.riskRewardRatio);
   const hasValidTrade = isValidTradeStructure(result);
 
+  // Multi-timeframe specific gating
+  if (result.isMultiTimeframeAnalysis && result.multiTimeframeContext) {
+    const confluenceScore = result.multiTimeframeContext.confluenceScore;
+    
+    if (isUltraMode) {
+      // Ultra multi-timeframe: Even stricter requirements
+      const minScoreForTrade = 85;
+      const minRR = 2.5; // Enhanced for multi-timeframe ultra
+      const minConfluence = 80;
+
+      if (gated.signal === "NEUTRAL" || gated.confidence === "LOW") {
+        gated.trade = null;
+        gated.riskRewardRatio = null as any;
+        return gated;
+      }
+
+      if (score < minScoreForTrade || !hasValidTrade || rr === null || rr < minRR || confluenceScore < minConfluence) {
+        gated.signal = "NEUTRAL";
+        gated.trade = null;
+        gated.riskRewardRatio = null as any;
+        return gated;
+      }
+
+      return gated;
+    } else {
+      // Normal multi-timeframe mode
+      const minScoreForTrade = 75;
+      const minRR = 2.0; // Slightly higher for multi-timeframe
+      const minConfluence = 70;
+
+      if (gated.signal === "NEUTRAL" || gated.confidence === "LOW") {
+        gated.trade = null;
+        gated.riskRewardRatio = null as any;
+        return gated;
+      }
+
+      if (score < minScoreForTrade || !hasValidTrade || rr === null || rr < minRR || confluenceScore < minConfluence) {
+        gated.signal = "NEUTRAL";
+        gated.trade = null;
+        gated.riskRewardRatio = null as any;
+        return gated;
+      }
+
+      return gated;
+    }
+  }
+
+  // Standard single-timeframe gating (existing logic)
   if (isUltraMode) {
     // Ultra: 2x stricter
     const minScoreForTrade = 85;

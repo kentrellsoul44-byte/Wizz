@@ -12,16 +12,48 @@ export interface TradeSignal {
   stopLoss: string;
 }
 
+// New types for multi-timeframe support
+export type TimeframeType = '1M' | '5M' | '15M' | '30M' | '1H' | '4H' | '12H' | '1D' | '3D' | '1W' | '1M_MONTHLY';
+
+export interface TimeframeImageData {
+  imageData: ImageData;
+  timeframe: TimeframeType;
+  label?: string; // Optional user-friendly label like "Bitcoin 4H Chart"
+}
+
+export interface TimeframeAnalysis {
+  timeframe: TimeframeType;
+  trend: 'BULLISH' | 'BEARISH' | 'NEUTRAL' | 'CONSOLIDATING';
+  keyLevels: {
+    support: string[];
+    resistance: string[];
+  };
+  momentum: 'STRONG_UP' | 'WEAK_UP' | 'NEUTRAL' | 'WEAK_DOWN' | 'STRONG_DOWN';
+  confidence: number; // 0-100
+  notes: string;
+}
+
+export interface MultiTimeframeContext {
+  primaryTimeframe: TimeframeType;
+  timeframeAnalyses: TimeframeAnalysis[];
+  overallTrend: 'BULLISH' | 'BEARISH' | 'NEUTRAL' | 'MIXED';
+  confluenceScore: number; // 0-100, how well timeframes align
+  conflictingSignals?: string[]; // Areas where timeframes disagree
+}
+
 export interface AnalysisResult {
   thinkingProcess: string; // The step-by-step analysis in Markdown.
   summary: string;
   signal: 'BUY' | 'SELL' | 'NEUTRAL';
   confidence: 'HIGH' | 'LOW';
   trade: TradeSignal | null;
-  timeframe?: string;
+  timeframe?: string; // Primary timeframe being analyzed
   riskRewardRatio?: string;
   verificationSummary: string; // The AI's self-critique of its own analysis.
   overallConfidenceScore: number; // A numerical score from 0-100.
+  // New multi-timeframe fields
+  multiTimeframeContext?: MultiTimeframeContext;
+  isMultiTimeframeAnalysis?: boolean;
 }
 
 export type MessageContent = string | AnalysisResult;
@@ -33,6 +65,7 @@ export interface ChatMessage {
   image?: string; // base64 data URL (deprecated; use images[] instead)
   images?: string[]; // array of base64 data URLs
   imageHashes?: string[]; // hashes for corresponding images (optional)
+  timeframeImages?: TimeframeImageData[]; // multi-timeframe images with metadata
   thinkingText?: string; // The markdown thinking process text
   rawResponse?: string; // Full raw text from model for history
 }

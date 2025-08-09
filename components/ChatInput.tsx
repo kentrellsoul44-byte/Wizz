@@ -1,13 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
-import type { ImageData } from '../types';
+import type { ImageData, TimeframeImageData } from '../types';
 import { PaperclipIcon } from './icons/PaperclipIcon';
 import { SendIcon } from './icons/SendIcon';
 import { StopIcon } from './icons/StopIcon';
 import { TuneIcon } from './icons/TuneIcon';
 import { canonicalizeImageToPngBytes, computeSha256Hex } from '../services/determinismService';
+import { MultiTimeframeInput } from './MultiTimeframeInput';
 
 interface ChatInputProps {
   onSendMessage: (prompt: string, images: ImageData[]) => void;
+  onSendMultiTimeframeMessage?: (prompt: string, timeframeImages: TimeframeImageData[]) => void;
   isLoading: boolean;
   onStopGeneration: () => void;
   initialPrompt?: string;
@@ -40,11 +42,21 @@ const fileToImageData = async (file: File): Promise<ImageData> => {
 };
 
 
-export const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading, onStopGeneration, initialPrompt, isUltraMode, onToggleUltraMode }) => {
+export const ChatInput: React.FC<ChatInputProps> = ({ 
+  onSendMessage, 
+  onSendMultiTimeframeMessage,
+  isLoading, 
+  onStopGeneration, 
+  initialPrompt, 
+  isUltraMode, 
+  onToggleUltraMode 
+}) => {
   const [prompt, setPrompt] = useState('');
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [isUltraMenuOpen, setIsUltraMenuOpen] = useState(false);
+  const [isMultiTimeframeMode, setIsMultiTimeframeMode] = useState(false);
+  const [timeframeImages, setTimeframeImages] = useState<TimeframeImageData[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
   const ultraMenuRef = useRef<HTMLDivElement>(null);
@@ -119,19 +131,29 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading, 
   };
 
   const handleSend = async () => {
-    if ((!prompt.trim() && imageFiles.length === 0) || isLoading) return;
+    if (isMultiTimeframeMode) {
+      if ((!prompt.trim() && timeframeImages.length === 0) || isLoading) return;
+      
+      if (onSendMultiTimeframeMessage) {
+        onSendMultiTimeframeMessage(prompt.trim(), timeframeImages);
+        setPrompt('');
+        setTimeframeImages([]);
+      }
+    } else {
+      if ((!prompt.trim() && imageFiles.length === 0) || isLoading) return;
 
-    let imagesData: ImageData[] = [];
-    if (imageFiles.length > 0) {
-        imagesData = await Promise.all(imageFiles.map(fileToImageData));
-    }
-    
-    onSendMessage(prompt, imagesData);
-    setPrompt('');
-    setImageFiles([]);
-    setImagePreviews([]);
-    if(fileInputRef.current) {
-        fileInputRef.current.value = "";
+      let imagesData: ImageData[] = [];
+      if (imageFiles.length > 0) {
+          imagesData = await Promise.all(imageFiles.map(fileToImageData));
+      }
+      
+      onSendMessage(prompt, imagesData);
+      setPrompt('');
+      setImageFiles([]);
+      setImagePreviews([]);
+      if(fileInputRef.current) {
+          fileInputRef.current.value = "";
+      }
     }
   };
 
@@ -156,7 +178,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading, 
          onDragOver={(e) => e.preventDefault()}
          onPaste={handlePaste}
     >
-      {imagePreviews.length > 0 && (
+      {!isMultiTimeframeMode && imagePreviews.length > 0 && (
         <div className="p-2 grid grid-cols-3 gap-2">
             {imagePreviews.map((src, idx) => (
               <div className="relative" key={idx}>
@@ -166,15 +188,26 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading, 
             ))}
         </div>
       )}
+      
+      {isMultiTimeframeMode && (
+        <div className="p-3 border-b border-border-color">
+          <MultiTimeframeInput
+            onTimeframeImagesChange={setTimeframeImages}
+            disabled={isLoading}
+          />
+        </div>
+      )}
       <div className="flex items-start">
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          className="p-2 text-text-secondary hover:text-text-primary self-center"
-          disabled={isLoading}
-          aria-label="Attach images"
-        >
-          <PaperclipIcon className="h-5 w-5" />
-        </button>
+        {!isMultiTimeframeMode && (
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="p-2 text-text-secondary hover:text-text-primary self-center"
+            disabled={isLoading}
+            aria-label="Attach images"
+          >
+            <PaperclipIcon className="h-5 w-5" />
+          </button>
+        )}
         <input
           type="file"
           ref={fileInputRef}
@@ -194,17 +227,41 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading, 
             </button>
             {isUltraMenuOpen && (
                 <div className="absolute bottom-full left-0 mb-2 w-72 bg-sidebar-bg border border-border-color rounded-lg shadow-xl z-10 p-3">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <h4 className="font-semibold text-text-primary">Wizz Ultra</h4>
-                            <p className="text-xs text-text-secondary">Advanced analysis mode</p>
+                    <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h4 className="font-semibold text-text-primary">Wizz Ultra</h4>
+                                <p className="text-xs text-text-secondary">Advanced analysis mode</p>
+                            </div>
+                            <label htmlFor="ultra-toggle" className="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" id="ultra-toggle" className="sr-only peer" checked={isUltraMode} onChange={onToggleUltraMode} />
+                                <div className="w-11 h-6 bg-border-color peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-offset-2 peer-focus:ring-accent-blue peer-focus:ring-offset-sidebar-bg rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-blue"></div>
+                            </label>
                         </div>
-                        <label htmlFor="ultra-toggle" className="relative inline-flex items-center cursor-pointer">
-                            <input type="checkbox" id="ultra-toggle" className="sr-only peer" checked={isUltraMode} onChange={onToggleUltraMode} />
-                            <div className="w-11 h-6 bg-border-color peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-offset-2 peer-focus:ring-accent-blue peer-focus:ring-offset-sidebar-bg rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-blue"></div>
-                        </label>
+                        
+                        <div className="flex items-center justify-between border-t border-border-color pt-3">
+                            <div>
+                                <h4 className="font-semibold text-text-primary">Multi-Timeframe</h4>
+                                <p className="text-xs text-text-secondary">Analyze multiple timeframes</p>
+                            </div>
+                            <label htmlFor="multi-timeframe-toggle" className="relative inline-flex items-center cursor-pointer">
+                                <input 
+                                    type="checkbox" 
+                                    id="multi-timeframe-toggle" 
+                                    className="sr-only peer" 
+                                    checked={isMultiTimeframeMode} 
+                                    onChange={(e) => setIsMultiTimeframeMode(e.target.checked)} 
+                                />
+                                <div className="w-11 h-6 bg-border-color peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-offset-2 peer-focus:ring-accent-blue peer-focus:ring-offset-sidebar-bg rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-blue"></div>
+                            </label>
+                        </div>
                     </div>
-                    <p className="text-xs text-text-secondary mt-2 border-t border-border-color pt-2">Provides a more detailed, multi-pass analysis for higher accuracy.</p>
+                    <p className="text-xs text-text-secondary mt-2 border-t border-border-color pt-2">
+                        {isMultiTimeframeMode 
+                            ? 'Upload charts from different timeframes (1H, 4H, 1D) for better confluence analysis.'
+                            : 'Provides a more detailed, multi-pass analysis for higher accuracy.'
+                        }
+                    </p>
                 </div>
             )}
         </div>

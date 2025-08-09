@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import type { ChatMessage, ImageData } from "../types";
+import type { ChatMessage, ImageData, TimeframeImageData } from "../types";
 
 const API_KEY = process.env.API_KEY;
 
@@ -59,6 +59,118 @@ const analysisResultSchema = {
         }
     },
     required: ['thinkingProcess', 'summary', 'signal', 'confidence', 'trade', 'timeframe', 'riskRewardRatio', 'verificationSummary', 'overallConfidenceScore']
+};
+
+const multiTimeframeAnalysisResultSchema = {
+    type: Type.OBJECT,
+    properties: {
+        thinkingProcess: {
+            type: Type.STRING,
+            description: "A detailed, step-by-step multi-timeframe analysis following the required process. This should be in Markdown format."
+        },
+        summary: {
+            type: Type.STRING,
+            description: "A concise summary of the overall multi-timeframe analysis."
+        },
+        signal: {
+            type: Type.STRING,
+            enum: ['BUY', 'SELL', 'NEUTRAL'],
+            description: "The final trade signal based on multi-timeframe confluence."
+        },
+        confidence: {
+            type: Type.STRING,
+            enum: ['HIGH', 'LOW'],
+            description: "The confidence level of the signal. HIGH if overallConfidenceScore >= 75, otherwise LOW."
+        },
+        trade: {
+            type: Type.OBJECT,
+            nullable: true,
+            description: "The trade details. Must be null if confidence is LOW or signal is NEUTRAL.",
+            properties: {
+                entryPrice: { type: Type.STRING },
+                takeProfit: { type: Type.STRING },
+                stopLoss: { type: Type.STRING }
+            }
+        },
+        timeframe: {
+            type: Type.STRING,
+            description: "The primary timeframe for trade execution (e.g., '4-Hour', '1-Day')."
+        },
+        riskRewardRatio: {
+            type: Type.STRING,
+            nullable: true,
+            description: "The calculated risk/reward ratio as a string (e.g., '2.5:1'). Must be null if no trade is provided."
+        },
+        verificationSummary: {
+            type: Type.STRING,
+            description: "A brief, critical self-assessment of the multi-timeframe analysis, noting any conflicting data or weaknesses."
+        },
+        overallConfidenceScore: {
+            type: Type.INTEGER,
+            description: "A final numerical confidence score from 0 to 100 based on multi-timeframe confluence."
+        },
+        multiTimeframeContext: {
+            type: Type.OBJECT,
+            description: "Multi-timeframe analysis context and confluence information.",
+            properties: {
+                primaryTimeframe: {
+                    type: Type.STRING,
+                    description: "The primary timeframe being analyzed for trade execution."
+                },
+                timeframeAnalyses: {
+                    type: Type.ARRAY,
+                    items: {
+                        type: Type.OBJECT,
+                        properties: {
+                            timeframe: { type: Type.STRING },
+                            trend: { 
+                                type: Type.STRING,
+                                enum: ['BULLISH', 'BEARISH', 'NEUTRAL', 'CONSOLIDATING']
+                            },
+                            keyLevels: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    support: { 
+                                        type: Type.ARRAY,
+                                        items: { type: Type.STRING }
+                                    },
+                                    resistance: { 
+                                        type: Type.ARRAY,
+                                        items: { type: Type.STRING }
+                                    }
+                                }
+                            },
+                            momentum: {
+                                type: Type.STRING,
+                                enum: ['STRONG_UP', 'WEAK_UP', 'NEUTRAL', 'WEAK_DOWN', 'STRONG_DOWN']
+                            },
+                            confidence: { type: Type.INTEGER },
+                            notes: { type: Type.STRING }
+                        }
+                    }
+                },
+                overallTrend: {
+                    type: Type.STRING,
+                    enum: ['BULLISH', 'BEARISH', 'NEUTRAL', 'MIXED']
+                },
+                confluenceScore: {
+                    type: Type.INTEGER,
+                    description: "How well timeframes align (0-100)."
+                },
+                conflictingSignals: {
+                    type: Type.ARRAY,
+                    items: { type: Type.STRING },
+                    nullable: true,
+                    description: "Areas where timeframes disagree."
+                }
+            }
+        },
+        isMultiTimeframeAnalysis: {
+            type: Type.BOOLEAN,
+            description: "Flag indicating this is a multi-timeframe analysis."
+        }
+    },
+    required: ['thinkingProcess', 'summary', 'signal', 'confidence', 'trade', 'timeframe', 'riskRewardRatio', 'verificationSummary', 'overallConfidenceScore', 'multiTimeframeContext', 'isMultiTimeframeAnalysis']
 };
 
 
@@ -153,6 +265,209 @@ const CONVERSATIONAL_SYSTEM_INSTRUCTION = `You are Wizz, an expert AI assistant 
 
 const CONVERSATIONAL_SYSTEM_INSTRUCTION_ULTRA = `You are Wizz Ultra, a world-class quantitative crypto analyst AI. Your knowledge is vast and precise. When a user asks a question without a chart, answer it with institutional-grade insight and clarity. If they ask for analysis, politely guide them to upload a chart to unlock your full capabilities. Be direct, insightful, and confident. Your answers should be formatted in Markdown.`;
 
+const MULTI_TIMEFRAME_SYSTEM_INSTRUCTION = `You are Wizz Multi-Timeframe, an elite crypto analyst specializing in multi-timeframe confluence analysis. You will analyze multiple chart timeframes simultaneously to provide superior market context and signal accuracy.
+
+**MULTI-TIMEFRAME ANALYSIS PROCESS:**
+
+**STEP 1: Individual Timeframe Analysis**
+For each provided timeframe chart, perform:
+1. **Timeframe Identification:** Clearly identify the timeframe (1H, 4H, 1D, etc.)
+2. **Trend Analysis:** Determine the trend direction and strength
+3. **Key Level Mapping:** Identify critical support/resistance levels
+4. **Momentum Assessment:** Evaluate momentum indicators and price action
+5. **Structure Analysis:** Note market structure breaks, order blocks, and liquidity zones
+
+**STEP 2: Cross-Timeframe Confluence**
+1. **Trend Alignment:** Compare trend directions across timeframes
+   - Higher timeframe trend = primary bias
+   - Lower timeframe trend = entry refinement
+2. **Level Confluence:** Identify where key levels align across timeframes
+3. **Momentum Confluence:** Check if momentum indicators agree across timeframes
+4. **Structure Confluence:** Look for aligned market structure signals
+
+**STEP 3: Conflict Resolution**
+1. **Identify Conflicts:** Note where timeframes disagree
+2. **Hierarchy Rules:** Higher timeframes take precedence for bias
+3. **Timing Rules:** Lower timeframes refine entry/exit timing
+4. **Risk Assessment:** Increase caution when major conflicts exist
+
+**STEP 4: Final Signal Generation**
+1. **Confluence Score:** Calculate overall timeframe alignment (0-100)
+2. **Primary Signal:** Based on highest weighted timeframe confluence
+3. **Entry Timeframe:** Select optimal timeframe for trade execution
+4. **Risk Management:** Adjust position size based on confluence strength
+
+**CONFLUENCE SCORING RULES:**
+- 90-100: Exceptional alignment across all timeframes
+- 75-89: Strong confluence with minor disagreements
+- 60-74: Moderate confluence with some conflicts
+- 40-59: Mixed signals, prefer NEUTRAL
+- <40: Conflicting signals, recommend NEUTRAL
+
+**ENHANCED RISK RULES FOR MULTI-TIMEFRAME:**
+- Require confluence score ≥70 for any trade signal
+- Higher timeframe trend must align with trade direction
+- Stop placement considers all timeframe key levels
+- Position sizing adjusted by confluence strength
+
+Your response must include detailed analysis of each timeframe and clear explanation of how they interact to form your final conclusion.`;
+
+const MULTI_TIMEFRAME_ULTRA_SYSTEM_INSTRUCTION = `You are Wizz Ultra Multi-Timeframe, the pinnacle of crypto analysis AI. You combine the multi-pass verification rigor of Ultra mode with sophisticated multi-timeframe confluence analysis.
+
+**ENHANCED MULTI-TIMEFRAME ULTRA PROCESS:**
+
+**PASS 1: Deep Individual Timeframe Analysis**
+For each timeframe:
+1. **Comprehensive Technical Scan:** Full 8-step analysis including advanced patterns
+2. **Smart Money Mapping:** Order blocks, FVGs, liquidity sweeps for each timeframe
+3. **Wyckoff/Elliott Analysis:** Phase identification and wave counts per timeframe
+4. **Advanced Confluence Matrix:** 8 strategies per timeframe with weighted scores
+
+**PASS 2: Cross-Timeframe Synthesis & Adversarial Testing**
+1. **Multi-Level Confluence:** Analyze trend, structure, and momentum across all timeframes
+2. **Temporal Hierarchy:** Weight timeframes by importance (Daily > 4H > 1H)
+3. **Conflict Analysis:** Deep dive into timeframe disagreements
+4. **Adversarial Testing:** Challenge multi-timeframe thesis with failure scenarios
+5. **Liquidity Mapping:** Cross-timeframe liquidity zone identification
+
+**PASS 3: Ultra-Strict Multi-Timeframe Gating**
+1. **Confluence Requirements:** Minimum 80% confluence score for any signal
+2. **Timeframe Agreement:** Primary trend must align across majority of timeframes
+3. **Risk Calibration:** Multi-timeframe risk assessment with enhanced R:R requirements
+4. **Final Verification:** Triple-check confluence logic and signal strength
+
+**ULTRA MULTI-TIMEFRAME ACCEPTANCE CRITERIA:**
+- Confluence score ≥80 (vs. 70 for normal multi-timeframe)
+- Higher timeframe trend must strongly support trade direction
+- At least 70% of timeframes must agree on signal direction
+- Enhanced R:R requirements: 2.5:1 minimum (vs. 2.2:1 Ultra single-timeframe)
+- No major structural conflicts between critical timeframes
+
+**CONFIDENCE SCORING (ENHANCED):**
+- Baseline confidence from individual strongest timeframe
+- +20 points for perfect confluence (100% agreement)
+- +10 points for strong confluence (80-99% agreement)
+- -10 points for each major timeframe conflict
+- -20 points if higher timeframe opposes signal
+
+Your analysis must demonstrate institutional-grade multi-timeframe thinking with complete transparency on how timeframes interact.`;
+
+
+// New function for multi-timeframe analysis
+export async function* analyzeMultiTimeframeStream(
+    history: ChatMessage[], 
+    prompt: string, 
+    timeframeImages: TimeframeImageData[], 
+    signal: AbortSignal, 
+    isUltraMode: boolean
+): AsyncGenerator<string> {
+    const turnBasedHistory = history
+        .filter(msg => msg.role === 'user' || (msg.role === 'assistant' && msg.rawResponse))
+        .map(msg => {
+            if (msg.role === 'assistant') {
+                return {
+                    role: 'model' as const,
+                    parts: [{ text: msg.rawResponse! }]
+                };
+            }
+            
+            const userParts: ({text: string} | {inlineData: {mimeType: string, data: string}})[] = [];
+            if (typeof msg.content === 'string' && msg.content.trim()) {
+                userParts.push({ text: msg.content });
+            }
+
+            // Handle both legacy images and timeframe images
+            const imageUrls: string[] = [];
+            if (Array.isArray(msg.images) && msg.images.length > 0) {
+                imageUrls.push(...msg.images);
+            }
+            if (msg.timeframeImages) {
+                for (const tfImg of msg.timeframeImages) {
+                    imageUrls.push(`data:${tfImg.imageData.mimeType};base64,${tfImg.imageData.data}`);
+                }
+            }
+
+            for (const url of imageUrls) {
+                const imgParts = url.split(';base64,');
+                if (imgParts.length === 2) {
+                    const mimeType = imgParts[0].split(':')[1];
+                    const data = imgParts[1];
+                    if (mimeType && data) {
+                        userParts.push({
+                            inlineData: {
+                                mimeType: mimeType,
+                                data: data,
+                            },
+                        });
+                    }
+                }
+            }
+
+            return {
+                role: 'user' as const,
+                parts: userParts,
+            };
+    }).filter(turn => turn.parts.length > 0);
+
+    // Create enhanced prompt with timeframe context
+    let enhancedPrompt = `${prompt}\n\n**MULTI-TIMEFRAME ANALYSIS REQUEST**\n\nPlease analyze the following timeframes:\n`;
+    
+    const currentUserParts: any[] = [{ text: enhancedPrompt }];
+    
+    for (const tfImg of timeframeImages) {
+        enhancedPrompt += `- ${tfImg.timeframe}${tfImg.label ? ` (${tfImg.label})` : ''}\n`;
+        currentUserParts.push({
+            inlineData: {
+                mimeType: tfImg.imageData.mimeType,
+                data: tfImg.imageData.data,
+            },
+        });
+    }
+
+    enhancedPrompt += '\nProvide a comprehensive multi-timeframe confluence analysis.';
+    currentUserParts[0].text = enhancedPrompt;
+
+    const contents = [
+        ...turnBasedHistory,
+        { role: 'user', parts: currentUserParts }
+    ];
+
+    const modelConfig = {
+        systemInstruction: isUltraMode ? MULTI_TIMEFRAME_ULTRA_SYSTEM_INSTRUCTION : MULTI_TIMEFRAME_SYSTEM_INSTRUCTION,
+        temperature: 0,
+        topK: 1,
+        topP: 1,
+        seed: 42,
+        responseMimeType: 'application/json',
+        responseSchema: multiTimeframeAnalysisResultSchema,
+    };
+
+    try {
+        const responseStream = await ai.models.generateContentStream({
+            model: isUltraMode ? 'gemini-2.5-pro' : 'gemini-2.5-flash',
+            contents: contents,
+            config: modelConfig as any,
+        });
+        
+        for await (const chunk of responseStream) {
+            if (signal.aborted) {
+                console.log('Multi-timeframe stream generation aborted by user.');
+                break;
+            }
+            const textChunk = (chunk as any)?.text;
+            if (typeof textChunk === 'string' && textChunk.length > 0) {
+                yield textChunk;
+            }
+        }
+
+    } catch (error) {
+        if (!(error instanceof Error && error.name === 'AbortError')) {
+            console.error("Error during multi-timeframe Gemini stream:", error);
+            const errorMessage = `Details: ${error instanceof Error ? error.message : String(error)}`;
+            yield `{"error": "Could not retrieve multi-timeframe analysis. ${errorMessage}"}`;
+        }
+    }
+}
 
 export async function* analyzeChartStream(history: ChatMessage[], prompt: string, images: ImageData[], signal: AbortSignal, isUltraMode: boolean): AsyncGenerator<string> {
     const turnBasedHistory = history
