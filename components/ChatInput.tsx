@@ -12,6 +12,7 @@ interface ChatInputProps {
   onSendMultiTimeframeMessage?: (prompt: string, timeframeImages: TimeframeImageData[]) => void;
   onSendSMCMessage?: (prompt: string, images: ImageData[]) => void;
   onSendAdvancedPatternMessage?: (prompt: string, images: ImageData[]) => void;
+  onSendProgressiveMessage?: (prompt: string, images: ImageData[], analysisType: 'STANDARD' | 'MULTI_TIMEFRAME' | 'SMC' | 'ADVANCED_PATTERN') => void;
   isLoading: boolean;
   onStopGeneration: () => void;
   initialPrompt?: string;
@@ -49,6 +50,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   onSendMultiTimeframeMessage,
   onSendSMCMessage,
   onSendAdvancedPatternMessage,
+  onSendProgressiveMessage,
   isLoading, 
   onStopGeneration, 
   initialPrompt, 
@@ -62,6 +64,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const [isMultiTimeframeMode, setIsMultiTimeframeMode] = useState(false);
   const [isSMCMode, setIsSMCMode] = useState(false);
   const [isAdvancedPatternMode, setIsAdvancedPatternMode] = useState(false);
+  const [isProgressiveMode, setIsProgressiveMode] = useState(false);
   const [timeframeImages, setTimeframeImages] = useState<TimeframeImageData[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
@@ -137,7 +140,38 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   const handleSend = async () => {
-    if (isMultiTimeframeMode) {
+    if (isProgressiveMode) {
+      if ((!prompt.trim() && imageFiles.length === 0 && timeframeImages.length === 0) || isLoading) return;
+
+      if (onSendProgressiveMessage) {
+        let analysisType: 'STANDARD' | 'MULTI_TIMEFRAME' | 'SMC' | 'ADVANCED_PATTERN' = 'STANDARD';
+        let imagesData: ImageData[] = [];
+        
+        if (isMultiTimeframeMode) {
+          analysisType = 'MULTI_TIMEFRAME';
+          // For multi-timeframe progressive, we'll convert timeframe images to regular images
+          if (timeframeImages.length > 0) {
+            imagesData = timeframeImages.map(tf => tf.imageData);
+          }
+        } else {
+          if (isSMCMode) analysisType = 'SMC';
+          else if (isAdvancedPatternMode) analysisType = 'ADVANCED_PATTERN';
+          
+          if (imageFiles.length > 0) {
+            imagesData = await Promise.all(imageFiles.map(fileToImageData));
+          }
+        }
+        
+        onSendProgressiveMessage(prompt, imagesData, analysisType);
+        setPrompt('');
+        setImageFiles([]);
+        setImagePreviews([]);
+        setTimeframeImages([]);
+        if(fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
+      }
+    } else if (isMultiTimeframeMode) {
       if ((!prompt.trim() && timeframeImages.length === 0) || isLoading) return;
       
       if (onSendMultiTimeframeMessage) {
@@ -347,9 +381,30 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                                   <div className="w-11 h-6 bg-border-color peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-offset-2 peer-focus:ring-accent-blue peer-focus:ring-offset-sidebar-bg rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-blue"></div>
                               </label>
                           </div>
+                          
+                          <div className="flex items-center justify-between border-t border-border-color pt-3">
+                              <div>
+                                  <h4 className="font-semibold text-text-primary">Progressive Analysis</h4>
+                                  <p className="text-xs text-text-secondary">Stream results in phases (30%→70%→100%)</p>
+                              </div>
+                              <label htmlFor="progressive-toggle" className="relative inline-flex items-center cursor-pointer">
+                                  <input 
+                                      type="checkbox" 
+                                      id="progressive-toggle" 
+                                      className="sr-only peer" 
+                                      checked={isProgressiveMode} 
+                                      onChange={(e) => {
+                                        setIsProgressiveMode(e.target.checked);
+                                      }} 
+                                  />
+                                  <div className="w-11 h-6 bg-border-color peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-offset-2 peer-focus:ring-accent-blue peer-focus:ring-offset-sidebar-bg rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-blue"></div>
+                              </label>
+                          </div>
                     </div>
                                          <p className="text-xs text-text-secondary mt-2 border-t border-border-color pt-2">
-                         {isMultiTimeframeMode 
+                         {isProgressiveMode
+                             ? 'Progressive analysis streams results in real-time: Quick overview (30% confidence) → Detailed analysis (70% confidence) → Final verification (100% confidence).'
+                             : isMultiTimeframeMode 
                              ? 'Upload charts from different timeframes (1H, 4H, 1D) for better confluence analysis.'
                              : isSMCMode
                              ? 'Advanced Smart Money Concepts analysis with order blocks, FVGs, and liquidity detection.'
