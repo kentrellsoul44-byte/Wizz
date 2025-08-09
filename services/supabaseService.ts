@@ -32,11 +32,13 @@ function isNetworkFetchError(err: unknown): boolean {
 export interface UserPreferences {
   theme: 'light' | 'dark';
   default_ultra_mode: boolean;
+  quick_profit_mode: boolean;
 }
 
 const defaultPreferences: UserPreferences = {
   theme: 'dark',
   default_ultra_mode: false,
+  quick_profit_mode: false,
 };
 
 export const getUserPreferences = async (userId: string): Promise<UserPreferences> => {
@@ -70,7 +72,7 @@ export const getUserPreferences = async (userId: string): Promise<UserPreference
   // a row should exist (unless the upsert failed due to a policy and no row existed before).
   let select = supabase
     .from('user_preferences')
-    .select('theme, default_ultra_mode')
+    .select('theme, default_ultra_mode, quick_profit_mode')
     .eq('user_id', userId)
     .single();
 
@@ -93,6 +95,7 @@ export const getUserPreferences = async (userId: string): Promise<UserPreference
     return {
       theme: retry.data.theme === 'light' ? 'light' : 'dark',
       default_ultra_mode: false,
+      quick_profit_mode: false,
     };
   }
 
