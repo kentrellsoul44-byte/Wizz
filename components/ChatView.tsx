@@ -780,11 +780,14 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode }) => {
         });
       }
 
+      // Get final session state for title generation
+      const finalSessionState = useSession.getState().sessions.find(s => s.id === activeSession.id);
+      
       // Generate title for first message
-      if (finalSessionState.messages.length === 2 && typeof finalContent === 'object' && 'summary' in finalContent) {
+      if (finalSessionState && finalSessionState.messages.length === 2 && typeof finalContent === 'object' && 'summary' in finalContent) {
         const title = finalContent.summary?.substring(0, 50) + (finalContent.summary && finalContent.summary.length > 50 ? '...' : '') || 'Progressive Analysis';
         updateSessionTitle(activeSession.id, title);
-      } else if (finalSessionState.messages.length === 2) {
+      } else if (finalSessionState && finalSessionState.messages.length === 2) {
         updateSessionTitle(activeSession.id, 'Progressive Chat');
       }
 
