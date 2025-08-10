@@ -1,6 +1,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import type { ChatMessage, ImageData, TimeframeImageData } from "../types";
 import { QuickProfitService } from "./quickProfitService";
+import { ConfidenceCalibrationService } from "./confidenceCalibrationService";
 
 const API_KEY = process.env.API_KEY;
 
@@ -1141,24 +1142,43 @@ export async function* analyzeChartStream(history: ChatMessage[], prompt: string
             }
         }
 
-        // Process Quick Profit mode if enabled and we have a valid analysis
-        if (isQuickProfitMode && hasImages && fullResponse.trim()) {
+        // Process analysis result with confidence calibration and Quick Profit mode
+        if (hasImages && fullResponse.trim()) {
             try {
                 const sanitizedResponse = sanitizeJsonResponse(fullResponse);
                 const analysisResult = JSON.parse(sanitizedResponse);
                 
-                if (analysisResult && analysisResult.trade && analysisResult.signal !== 'NEUTRAL') {
-                    // Apply Quick Profit analysis
-                    const quickProfitAnalysis = QuickProfitService.analyzeQuickProfitPercentage(analysisResult);
-                    const updatedTrade = QuickProfitService.applyQuickProfitToTrade(
-                        analysisResult.trade, 
-                        quickProfitAnalysis.recommendedPercentage
+                if (analysisResult) {
+                    // Apply enhanced confidence calibration
+                    const calibratedConfidence = ConfidenceCalibrationService.calibrateConfidence(
+                        analysisResult, 
+                        isUltraMode
                     );
                     
-                    // Update the analysis result
-                    analysisResult.trade = updatedTrade;
-                    analysisResult.quickProfitAnalysis = quickProfitAnalysis;
-                    analysisResult.isQuickProfitMode = true;
+                    // Update analysis result with calibrated confidence
+                    analysisResult.calibratedConfidence = calibratedConfidence;
+                    analysisResult.hasEnhancedConfidence = true;
+                    
+                    // Override the original confidence score and level based on calibration
+                    analysisResult.overallConfidenceScore = calibratedConfidence.overallScore;
+                    analysisResult.confidence = ConfidenceCalibrationService.getConfidenceLevel(
+                        calibratedConfidence, 
+                        isUltraMode
+                    );
+                    
+                    // Apply Quick Profit analysis if enabled
+                    if (isQuickProfitMode && analysisResult.trade && analysisResult.signal !== 'NEUTRAL') {
+                        const quickProfitAnalysis = QuickProfitService.analyzeQuickProfitPercentage(analysisResult);
+                        const updatedTrade = QuickProfitService.applyQuickProfitToTrade(
+                            analysisResult.trade, 
+                            quickProfitAnalysis.recommendedPercentage
+                        );
+                        
+                        // Update the analysis result
+                        analysisResult.trade = updatedTrade;
+                        analysisResult.quickProfitAnalysis = quickProfitAnalysis;
+                        analysisResult.isQuickProfitMode = true;
+                    }
                     
                     // Yield the updated result
                     const updatedResponse = JSON.stringify(analysisResult, null, 0);
