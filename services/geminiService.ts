@@ -1123,11 +1123,17 @@ export async function* analyzeChartStream(history: ChatMessage[], prompt: string
         };
 
     try {
-        const responseStream = await ai.models.generateContentStream({
-            model: hasImages ? (isUltraMode ? 'gemini-2.5-pro' : 'gemini-2.5-flash') : 'gemini-2.5-flash',
-            contents: contents,
-            config: modelConfig as any,
-        });
+        // Add timeout and retry logic for the Gemini API call
+        const responseStream = await Promise.race([
+            ai.models.generateContentStream({
+                model: hasImages ? (isUltraMode ? 'gemini-2.5-pro' : 'gemini-2.5-flash') : 'gemini-2.5-flash',
+                contents: contents,
+                config: modelConfig as any,
+            }),
+            new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Request timeout after 30 seconds')), 30000)
+            )
+        ]) as any;
         
         let fullResponse = '';
         for await (const chunk of responseStream) {
@@ -1193,7 +1199,21 @@ export async function* analyzeChartStream(history: ChatMessage[], prompt: string
     } catch (error) {
         if (!(error instanceof Error && error.name === 'AbortError')) {
             console.error("Error during Gemini stream:", error);
-            const errorMessage = `Details: ${error instanceof Error ? error.message : String(error)}`;
+            
+            // Check for specific network/fetch errors
+            const isNetworkError = error instanceof Error && 
+                (error.message.includes('Failed to fetch') || 
+                 error.message.includes('NetworkError') || 
+                 error.message.includes('timeout') ||
+                 error.name === 'TypeError');
+            
+            let errorMessage: string;
+            if (isNetworkError) {
+                errorMessage = "Network connection issue. Please check your internet connection and try again.";
+            } else {
+                errorMessage = `Details: ${error instanceof Error ? error.message : String(error)}`;
+            }
+            
             if (hasImages) {
                 yield `{"error": "Could not retrieve analysis. ${errorMessage}"}`;
             } else {

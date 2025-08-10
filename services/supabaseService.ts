@@ -27,6 +27,23 @@ function isNetworkFetchError(err: unknown): boolean {
   return typeof message === 'string' && /Failed to fetch|NetworkError|TypeError: Failed to fetch/i.test(message);
 }
 
+// Retry helper for network-related failures
+async function retryWithBackoff<T>(operation: () => Promise<T>, maxRetries: number = 3): Promise<T> {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (attempt === maxRetries || !isNetworkFetchError(error)) {
+        throw error;
+      }
+      // Exponential backoff: 1s, 2s, 4s
+      const delay = Math.pow(2, attempt - 1) * 1000;
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+  throw new Error('Max retries exceeded');
+}
+
 // --- User Preferences ---
 
 export interface UserPreferences {
@@ -74,17 +91,17 @@ export const getUserPreferences = async (userId: string): Promise<UserPreference
     .from('user_preferences')
     .select('theme, default_ultra_mode, quick_profit_mode')
     .eq('user_id', userId)
-    .single();
+    .maybeSingle(); // Use maybeSingle() instead of single() to handle missing rows gracefully
 
-  let { data, error: selectError } = await select;
+  let { data, error: selectError } = await retryWithBackoff(() => select);
 
   // If the column doesn't exist (42703), retry without it and fall back to default.
   if (selectError && (selectError as any).code === '42703') {
-    const retry = await supabase
+    const retry = await retryWithBackoff(() => supabase
       .from('user_preferences')
       .select('theme')
       .eq('user_id', userId)
-      .single();
+      .maybeSingle());
     if (retry.error) {
       if (isNetworkFetchError(retry.error)) {
         return { ...defaultPreferences };
@@ -107,9 +124,16 @@ export const getUserPreferences = async (userId: string): Promise<UserPreference
     return { ...defaultPreferences };
   }
 
+  // Handle case where no data was returned (user doesn't exist yet)
+  if (!data) {
+    console.log('No user preferences found, returning defaults');
+    return { ...defaultPreferences };
+  }
+
   return {
-    theme: data!.theme === 'light' ? 'light' : 'dark',
+    theme: data.theme === 'light' ? 'light' : 'dark',
     default_ultra_mode: (data as any).default_ultra_mode ?? false,
+    quick_profit_mode: (data as any).quick_profit_mode ?? false,
   };
 };
 
