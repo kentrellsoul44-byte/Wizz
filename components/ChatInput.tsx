@@ -18,6 +18,8 @@ interface ChatInputProps {
   initialPrompt?: string;
   isUltraMode: boolean;
   onToggleUltraMode: () => void;
+  isQuickProfitMode: boolean;
+  onToggleQuickProfitMode: () => void;
 }
 
 const fileToImageData = async (file: File): Promise<ImageData> => {
@@ -55,7 +57,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   onStopGeneration, 
   initialPrompt, 
   isUltraMode, 
-  onToggleUltraMode 
+  onToggleUltraMode,
+  isQuickProfitMode,
+  onToggleQuickProfitMode
 }) => {
   const [prompt, setPrompt] = useState('');
   const [imageFiles, setImageFiles] = useState<File[]>([]);
@@ -309,6 +313,17 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                             </div>
                             <label htmlFor="ultra-toggle" className="relative inline-flex items-center cursor-pointer">
                                 <input type="checkbox" id="ultra-toggle" className="sr-only peer" checked={isUltraMode} onChange={onToggleUltraMode} />
+                                <div className="w-11 h-6 bg-border-color peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-offset-2 peer-focus:ring-accent-blue peer-focus:ring-offset-sidebar-bg rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-blue"></div>
+                            </label>
+                        </div>
+                        
+                        <div className="flex items-center justify-between border-t border-border-color pt-3">
+                            <div>
+                                <h4 className="font-semibold text-text-primary">Quick Profit Mode</h4>
+                                <p className="text-xs text-text-secondary">10%, 15%, 20%, 25% profit targets</p>
+                            </div>
+                            <label htmlFor="quick-profit-toggle" className="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" id="quick-profit-toggle" className="sr-only peer" checked={isQuickProfitMode} onChange={onToggleQuickProfitMode} />
                                 <div className="w-11 h-6 bg-border-color peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-offset-2 peer-focus:ring-accent-blue peer-focus:ring-offset-sidebar-bg rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-blue"></div>
                             </label>
                         </div>

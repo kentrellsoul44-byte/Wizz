@@ -120,6 +120,7 @@ const AppContent: React.FC = () => {
                         <ChatView
                             key={activeSession.id}
                             defaultUltraMode={preferences.default_ultra_mode}
+                            defaultQuickProfitMode={preferences.quick_profit_mode}
                         />
                     ) : (
                         <div className="flex-1 flex items-center justify-center">

@@ -4,6 +4,7 @@ import type { ChatMessage, AnalysisResult } from '../types';
 import { RegenerateIcon } from './icons/RegenerateIcon';
 import { CopyIcon } from './icons/CopyIcon';
 import { CheckIcon } from './icons/CheckIcon';
+import { QuickProfitDisplay } from './QuickProfitDisplay';
 
 const UserIcon: React.FC = () => (
   <div className="w-8 h-8 rounded-full bg-accent-blue flex items-center justify-center font-bold text-white flex-shrink-0">
@@ -53,6 +54,12 @@ const AnalysisCard: React.FC<{ result: AnalysisResult }> = ({ result }) => {
             textToCopy += `Entry Price: ${result.trade.entryPrice}\n`;
             textToCopy += `Take Profit: ${result.trade.takeProfit}\n`;
             textToCopy += `Stop Loss: ${result.trade.stopLoss}\n`;
+            
+            // Add Quick Profit mode information
+            if (result.isQuickProfitMode && result.quickProfitAnalysis) {
+                textToCopy += `Quick Profit Mode: ${result.quickProfitAnalysis.recommendedPercentage}% target\n`;
+                textToCopy += `Quick Profit Confidence: ${result.quickProfitAnalysis.confidence}%\n`;
+            }
         }
         if (result.riskRewardRatio) {
             textToCopy += `Risk/Reward Ratio: ${result.riskRewardRatio}\n`;
@@ -129,6 +136,14 @@ const AnalysisCard: React.FC<{ result: AnalysisResult }> = ({ result }) => {
                               <span className="font-mono text-accent-red">{result.trade.stopLoss}</span>
                           </div>
                       </div>
+                      
+                      {/* Quick Profit Mode Display */}
+                      {result.isQuickProfitMode && result.quickProfitAnalysis && (
+                          <QuickProfitDisplay 
+                              analysis={result.quickProfitAnalysis} 
+                              isVisible={true} 
+                          />
+                      )}
                   </div>
               )}
               {result.confidence === 'LOW' && (

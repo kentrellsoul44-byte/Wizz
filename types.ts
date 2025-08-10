@@ -10,6 +10,25 @@ export interface TradeSignal {
   entryPrice: string;
   takeProfit: string;
   stopLoss: string;
+  profitPercentage?: number; // Quick Profit mode percentage (10, 15, 20, 25)
+  quickProfitMode?: boolean; // Whether this signal was generated in Quick Profit mode
+}
+
+// Quick Profit Mode Types
+export type QuickProfitPercentage = 10 | 15 | 20 | 25;
+
+export interface QuickProfitAnalysis {
+  recommendedPercentage: QuickProfitPercentage;
+  confidence: number; // 0-100
+  reasoning: string;
+  marketConditions: {
+    volatility: 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME';
+    trendStrength: 'WEAK' | 'MODERATE' | 'STRONG' | 'VERY_STRONG';
+    supportResistanceDistance: 'CLOSE' | 'MEDIUM' | 'FAR';
+    recentPriceAction: 'CONSOLIDATING' | 'BREAKOUT' | 'REVERSAL' | 'CONTINUATION';
+  };
+  riskFactors: string[];
+  opportunities: string[];
 }
 
 // New types for multi-timeframe support
@@ -423,6 +442,9 @@ export interface AnalysisResult {
   // Advanced Pattern Recognition fields
   patternAnalysis?: AdvancedPatternContext;
   hasAdvancedPatterns?: boolean;
+  // Quick Profit Mode fields
+  quickProfitAnalysis?: QuickProfitAnalysis;
+  isQuickProfitMode?: boolean;
 }
 
 export type MessageContent = string | AnalysisResult;

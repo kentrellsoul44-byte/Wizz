@@ -105,7 +105,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
 
   const handleToggleUltraMode = (e: React.ChangeEvent<HTMLInputElement>) => {
     onUpdatePreferences({ default_ultra_mode: e.target.checked });
-  }
+  };
+
+  const handleToggleQuickProfitMode = (e: React.ChangeEvent<HTMLInputElement>) => {
+    onUpdatePreferences({ quick_profit_mode: e.target.checked });
+  };
 
   if (!isOpen) return null;
 
@@ -199,6 +203,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                 </div>
                  <label htmlFor="ultra-default-toggle" className="relative inline-flex items-center cursor-pointer">
                     <input type="checkbox" id="ultra-default-toggle" className="sr-only peer" checked={preferences.default_ultra_mode} onChange={handleToggleUltraMode} />
+                    <div className="w-11 h-6 bg-border-color peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-offset-2 peer-focus:ring-accent-blue peer-focus:ring-offset-sidebar-bg rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-blue"></div>
+                </label>
+            </div>
+            
+            <div className="flex items-center justify-between bg-input-bg-50 p-3 rounded-lg mt-3">
+                <div>
+                    <label htmlFor="quick-profit-default" className="font-medium text-text-primary text-sm">Set Quick Profit Mode as default</label>
+                    <p className="text-xs text-text-secondary">Start new analyses with Quick Profit Mode enabled.</p>
+                </div>
+                 <label htmlFor="quick-profit-default-toggle" className="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="quick-profit-default-toggle" className="sr-only peer" checked={preferences.quick_profit_mode} onChange={handleToggleQuickProfitMode} />
                     <div className="w-11 h-6 bg-border-color peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-offset-2 peer-focus:ring-accent-blue peer-focus:ring-offset-sidebar-bg rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-blue"></div>
                 </label>
             </div>

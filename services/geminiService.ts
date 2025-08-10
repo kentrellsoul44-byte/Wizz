@@ -1,5 +1,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import type { ChatMessage, ImageData, TimeframeImageData } from "../types";
+import { QuickProfitService } from "./quickProfitService";
 
 const API_KEY = process.env.API_KEY;
 
@@ -926,7 +927,8 @@ export async function* analyzeMultiTimeframeStream(
     prompt: string, 
     timeframeImages: TimeframeImageData[], 
     signal: AbortSignal, 
-    isUltraMode: boolean
+    isUltraMode: boolean,
+    isQuickProfitMode: boolean
 ): AsyncGenerator<string> {
     const turnBasedHistory = history
         .filter(msg => msg.role === 'user' || (msg.role === 'assistant' && msg.rawResponse))
@@ -1036,7 +1038,7 @@ export async function* analyzeMultiTimeframeStream(
     }
 }
 
-export async function* analyzeChartStream(history: ChatMessage[], prompt: string, images: ImageData[], signal: AbortSignal, isUltraMode: boolean): AsyncGenerator<string> {
+export async function* analyzeChartStream(history: ChatMessage[], prompt: string, images: ImageData[], signal: AbortSignal, isUltraMode: boolean, isQuickProfitMode: boolean): AsyncGenerator<string> {
     const turnBasedHistory = history
         .filter(msg => msg.role === 'user' || (msg.role === 'assistant' && msg.rawResponse))
         .map(msg => {
@@ -1126,6 +1128,7 @@ export async function* analyzeChartStream(history: ChatMessage[], prompt: string
             config: modelConfig as any,
         });
         
+        let fullResponse = '';
         for await (const chunk of responseStream) {
             if (signal.aborted) {
                 console.log('Stream generation aborted by user.');
@@ -1133,7 +1136,37 @@ export async function* analyzeChartStream(history: ChatMessage[], prompt: string
             }
             const textChunk = (chunk as any)?.text;
             if (typeof textChunk === 'string' && textChunk.length > 0) {
+                fullResponse += textChunk;
                 yield textChunk;
+            }
+        }
+
+        // Process Quick Profit mode if enabled and we have a valid analysis
+        if (isQuickProfitMode && hasImages && fullResponse.trim()) {
+            try {
+                const sanitizedResponse = sanitizeJsonResponse(fullResponse);
+                const analysisResult = JSON.parse(sanitizedResponse);
+                
+                if (analysisResult && analysisResult.trade && analysisResult.signal !== 'NEUTRAL') {
+                    // Apply Quick Profit analysis
+                    const quickProfitAnalysis = QuickProfitService.analyzeQuickProfitPercentage(analysisResult);
+                    const updatedTrade = QuickProfitService.applyQuickProfitToTrade(
+                        analysisResult.trade, 
+                        quickProfitAnalysis.recommendedPercentage
+                    );
+                    
+                    // Update the analysis result
+                    analysisResult.trade = updatedTrade;
+                    analysisResult.quickProfitAnalysis = quickProfitAnalysis;
+                    analysisResult.isQuickProfitMode = true;
+                    
+                    // Yield the updated result
+                    const updatedResponse = JSON.stringify(analysisResult, null, 0);
+                    yield '\n' + updatedResponse;
+                }
+            } catch (error) {
+                console.error('Error processing Quick Profit mode:', error);
+                // Continue without Quick Profit processing if there's an error
             }
         }
 
@@ -1156,7 +1189,8 @@ export async function* analyzeSMCStream(
     prompt: string, 
     images: ImageData[], 
     signal: AbortSignal, 
-    isUltraMode: boolean
+    isUltraMode: boolean,
+    isQuickProfitMode: boolean
 ): AsyncGenerator<string> {
     const turnBasedHistory = history
         .filter(msg => msg.role === 'user' || (msg.role === 'assistant' && msg.rawResponse))
@@ -1280,7 +1314,8 @@ export async function* analyzeAdvancedPatternsStream(
     prompt: string, 
     images: ImageData[], 
     signal: AbortSignal, 
-    isUltraMode: boolean
+    isUltraMode: boolean,
+    isQuickProfitMode: boolean
 ): AsyncGenerator<string> {
     const turnBasedHistory = history
         .filter(msg => msg.role === 'user' || (msg.role === 'assistant' && msg.rawResponse))
