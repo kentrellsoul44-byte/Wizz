@@ -652,3 +652,253 @@ export interface ProgressiveAnalysisState {
   estimatedTotalTime: number;
   actualTotalTime?: number;
 }
+
+// Stop-Loss Intelligence System Types
+export type StopLossType = 
+  | 'BASIC_INVALIDATION' 
+  | 'ATR_DYNAMIC' 
+  | 'SUPPORT_RESISTANCE' 
+  | 'LIQUIDITY_AVOIDANCE' 
+  | 'TIME_ADJUSTED' 
+  | 'AI_OPTIMIZED' 
+  | 'HYBRID';
+
+export type StopAdjustmentReason = 
+  | 'ATR_EXPANSION' 
+  | 'ATR_CONTRACTION' 
+  | 'SUPPORT_PROXIMITY' 
+  | 'RESISTANCE_PROXIMITY' 
+  | 'LIQUIDITY_POOL_DETECTED' 
+  | 'TIME_DECAY' 
+  | 'VOLATILITY_SPIKE' 
+  | 'MARKET_SESSION_CHANGE' 
+  | 'AI_OPTIMIZATION';
+
+export interface ATRMetrics {
+  current: number;
+  historical: number;
+  percentile: number; // Current ATR vs historical percentile
+  trend: 'EXPANDING' | 'CONTRACTING' | 'STABLE';
+  expansionRate: number; // Rate of change
+  sessionATR: number; // Current session ATR
+  dailyATR: number;
+  weeklyATR: number;
+  normalizedATR: number; // ATR / price ratio
+}
+
+export interface SupportResistanceLevel {
+  id: string;
+  price: number;
+  type: 'SUPPORT' | 'RESISTANCE';
+  strength: 'WEAK' | 'MODERATE' | 'STRONG' | 'VERY_STRONG';
+  touches: number;
+  lastTouch: string; // ISO timestamp
+  timeframe: TimeframeType;
+  confluence: {
+    fibonacci: boolean;
+    pivot: boolean;
+    psychological: boolean;
+    volumeProfile: boolean;
+    orderBlock: boolean;
+    fairValueGap: boolean;
+  };
+  distance: number; // Distance from current price
+  penetrationHistory: {
+    timestamp: string;
+    depth: number; // How far price penetrated
+    duration: number; // How long it stayed penetrated (minutes)
+    recovered: boolean;
+  }[];
+  reliability: number; // 0-100 based on historical behavior
+}
+
+export interface LiquidityPool {
+  id: string;
+  price: number;
+  type: 'EQUAL_HIGHS' | 'EQUAL_LOWS' | 'STOP_CLUSTER' | 'OPTION_STRIKE' | 'ROUND_NUMBER' | 'PREVIOUS_HIGH_LOW';
+  intensity: 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME';
+  timeframe: TimeframeType;
+  estimatedLiquidity: number; // Estimated volume/stops
+  sweepProbability: number; // 0-100 probability of being swept
+  lastSweep?: {
+    timestamp: string;
+    penetrationDepth: number;
+    volumeSpike: boolean;
+  };
+  proximity: number; // Distance from current price
+  avoidanceZone: {
+    upper: number;
+    lower: number;
+    bufferPips: number;
+  };
+}
+
+export interface TimeBasedStopAdjustment {
+  sessionType: 'ASIAN' | 'LONDON' | 'NEW_YORK' | 'OVERLAP' | 'WEEKEND';
+  adjustmentFactor: number; // Multiplier for stop distance
+  reasoning: string;
+  volatilityExpectation: 'LOW' | 'MEDIUM' | 'HIGH';
+  liquidityExpectation: 'LOW' | 'MEDIUM' | 'HIGH';
+  newsEvents: {
+    upcoming: boolean;
+    timeToEvent: number; // Minutes
+    impact: 'LOW' | 'MEDIUM' | 'HIGH';
+    type: string;
+  }[];
+}
+
+export interface StopLossIntelligence {
+  id: string;
+  timestamp: string;
+  currentPrice: number;
+  entryPrice: number;
+  tradeDirection: 'BUY' | 'SELL';
+  
+  // Basic stop data
+  basicStop: {
+    price: number;
+    invalidationLevel: number;
+    distance: number; // Pips/points from entry
+    riskRewardRatio: number;
+  };
+  
+  // ATR-based analysis
+  atrAnalysis: {
+    metrics: ATRMetrics;
+    recommendedStop: number;
+    multiplier: number; // ATR multiplier used
+    confidence: number; // 0-100
+    adjustmentFromBasic: number; // Difference from basic stop
+  };
+  
+  // Support/Resistance analysis
+  supportResistanceAnalysis: {
+    nearbyLevels: SupportResistanceLevel[];
+    criticalLevel?: SupportResistanceLevel;
+    recommendedStop: number;
+    safetyBuffer: number; // Additional buffer beyond S/R
+    confidence: number;
+  };
+  
+  // Liquidity pool analysis
+  liquidityAnalysis: {
+    nearbyPools: LiquidityPool[];
+    riskPools: LiquidityPool[]; // Pools that could cause stop hunting
+    recommendedStop: number;
+    avoidanceAdjustment: number;
+    confidence: number;
+  };
+  
+  // Time-based adjustments
+  timeAdjustments: {
+    currentSession: TimeBasedStopAdjustment;
+    upcomingChanges: TimeBasedStopAdjustment[];
+    recommendedStop: number;
+    dynamicAdjustment: boolean; // Whether to adjust over time
+  };
+  
+  // AI optimization
+  aiOptimization: {
+    modelVersion: string;
+    inputs: {
+      marketConditions: any;
+      historicalPerformance: any;
+      patternContext: any;
+    };
+    recommendedStop: number;
+    confidence: number;
+    reasoning: string;
+    alternativeScenarios: {
+      condition: string;
+      recommendedStop: number;
+      probability: number;
+    }[];
+  };
+  
+  // Final recommendation
+  finalRecommendation: {
+    type: StopLossType;
+    price: number;
+    distance: number;
+    riskRewardRatio: number;
+    confidence: number;
+    reasoning: string;
+    adjustmentHistory: {
+      timestamp: string;
+      fromPrice: number;
+      toPrice: number;
+      reason: StopAdjustmentReason;
+      triggerCondition: string;
+    }[];
+    monitoringRules: {
+      atrThreshold: number; // Adjust if ATR changes by this %
+      proximityThreshold: number; // Adjust if S/R comes within this distance
+      timeThreshold: number; // Adjust after this many minutes
+      volatilityThreshold: number; // Adjust if volatility spikes by this %
+    };
+  };
+  
+  // Risk assessment
+  riskAssessment: {
+    stopHuntingRisk: 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME';
+    gapRisk: 'LOW' | 'MEDIUM' | 'HIGH';
+    liquidityRisk: 'LOW' | 'MEDIUM' | 'HIGH';
+    volatilityRisk: 'LOW' | 'MEDIUM' | 'HIGH';
+    overallRisk: 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME';
+    mitigationStrategies: string[];
+  };
+}
+
+export interface StopLossOptimizationRequest {
+  entryPrice: number;
+  currentPrice: number;
+  tradeDirection: 'BUY' | 'SELL';
+  timeframe: TimeframeType;
+  asset: string;
+  marketData: {
+    priceHistory: Array<{
+      timestamp: string;
+      open: number;
+      high: number;
+      low: number;
+      close: number;
+      volume: number;
+    }>;
+    recentCandles: number; // How many recent candles to analyze
+  };
+  preferences: {
+    riskTolerance: 'CONSERVATIVE' | 'MODERATE' | 'AGGRESSIVE';
+    preferredStopType: StopLossType[];
+    maxRiskPercent: number;
+    minRiskRewardRatio: number;
+    allowDynamicAdjustment: boolean;
+  };
+  context?: {
+    smcAnalysis?: SMCAnalysisContext;
+    patternAnalysis?: any;
+    multiTimeframeContext?: MultiTimeframeContext;
+  };
+}
+
+export interface StopLossPerformanceMetrics {
+  totalTrades: number;
+  stopHitRate: number; // Percentage of trades that hit stop
+  averageStopDistance: number;
+  averageTimeToStop: number; // Minutes
+  falseStopRate: number; // Stops hit then price recovered
+  optimalStopRate: number; // Stops that were well-placed
+  typePerformance: {
+    [key in StopLossType]: {
+      usage: number;
+      successRate: number;
+      averageRR: number;
+      averageDistance: number;
+    };
+  };
+  adjustmentEffectiveness: {
+    totalAdjustments: number;
+    beneficialAdjustments: number;
+    harmfulAdjustments: number;
+    neutralAdjustments: number;
+  };
+}
