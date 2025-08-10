@@ -11,6 +11,45 @@ if (!API_KEY) {
 
 const ai = new GoogleGenAI({ apiKey: API_KEY });
 
+// Helper function for reliable Gemini API calls with retry and timeout
+async function makeGeminiRequest(
+    model: string, 
+    contents: any[], 
+    config: any, 
+    timeoutMs: number = 60000,
+    maxRetries: number = 3
+): Promise<any> {
+    const makeRequest = async (attempt: number = 1): Promise<any> => {
+        try {
+            return await Promise.race([
+                ai.models.generateContentStream({
+                    model,
+                    contents,
+                    config,
+                }),
+                new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error(`Request timeout after ${timeoutMs / 1000} seconds`)), timeoutMs)
+                )
+            ]);
+        } catch (error) {
+            const isRetryableError = error instanceof Error && 
+                (error.message.includes('timeout') || 
+                 error.message.includes('Failed to fetch') || 
+                 error.message.includes('NetworkError') ||
+                 error.name === 'TypeError');
+            
+            if (isRetryableError && attempt < maxRetries) {
+                console.log(`Gemini API attempt ${attempt} failed, retrying in ${attempt * 2}s...`);
+                await new Promise(resolve => setTimeout(resolve, attempt * 2000));
+                return makeRequest(attempt + 1);
+            }
+            throw error;
+        }
+    };
+
+    return makeRequest();
+}
+
 const analysisResultSchema = {
     type: Type.OBJECT,
     properties: {
@@ -1013,11 +1052,11 @@ export async function* analyzeMultiTimeframeStream(
     };
 
     try {
-        const responseStream = await ai.models.generateContentStream({
-            model: isUltraMode ? 'gemini-2.5-pro' : 'gemini-2.5-flash',
-            contents: contents,
-            config: modelConfig as any,
-        });
+        const responseStream = await makeGeminiRequest(
+            isUltraMode ? 'gemini-2.5-pro' : 'gemini-2.5-flash',
+            contents,
+            modelConfig as any
+        );
         
         for await (const chunk of responseStream) {
             if (signal.aborted) {
@@ -1123,17 +1162,11 @@ export async function* analyzeChartStream(history: ChatMessage[], prompt: string
         };
 
     try {
-        // Add timeout and retry logic for the Gemini API call
-        const responseStream = await Promise.race([
-            ai.models.generateContentStream({
-                model: hasImages ? (isUltraMode ? 'gemini-2.5-pro' : 'gemini-2.5-flash') : 'gemini-2.5-flash',
-                contents: contents,
-                config: modelConfig as any,
-            }),
-            new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Request timeout after 30 seconds')), 30000)
-            )
-        ]) as any;
+        const responseStream = await makeGeminiRequest(
+            hasImages ? (isUltraMode ? 'gemini-2.5-pro' : 'gemini-2.5-flash') : 'gemini-2.5-flash',
+            contents,
+            modelConfig as any
+        );
         
         let fullResponse = '';
         for await (const chunk of responseStream) {
@@ -1318,11 +1351,11 @@ export async function* analyzeSMCStream(
         };
 
     try {
-        const responseStream = await ai.models.generateContentStream({
-            model: hasImages ? 'gemini-2.5-pro' : 'gemini-2.5-flash', // Use Pro for SMC analysis
-            contents: contents,
-            config: modelConfig as any,
-        });
+        const responseStream = await makeGeminiRequest(
+            hasImages ? 'gemini-2.5-pro' : 'gemini-2.5-flash', // Use Pro for SMC analysis
+            contents,
+            modelConfig as any
+        );
         
         for await (const chunk of responseStream) {
             if (signal.aborted) {
@@ -1443,11 +1476,11 @@ export async function* analyzeAdvancedPatternsStream(
         };
 
     try {
-        const responseStream = await ai.models.generateContentStream({
-            model: hasImages ? 'gemini-2.5-pro' : 'gemini-2.5-flash', // Use Pro for Advanced Pattern analysis
-            contents: contents,
-            config: modelConfig as any,
-        });
+        const responseStream = await makeGeminiRequest(
+            hasImages ? 'gemini-2.5-pro' : 'gemini-2.5-flash', // Use Pro for Advanced Pattern analysis
+            contents,
+            modelConfig as any
+        );
         
         for await (const chunk of responseStream) {
             if (signal.aborted) {
