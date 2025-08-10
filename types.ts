@@ -445,6 +445,9 @@ export interface AnalysisResult {
   // Quick Profit Mode fields
   quickProfitAnalysis?: QuickProfitAnalysis;
   isQuickProfitMode?: boolean;
+  // Enhanced Confidence Calibration fields
+  calibratedConfidence?: import('./services/confidenceCalibrationService').CalibratedConfidence;
+  hasEnhancedConfidence?: boolean;
 }
 
 export type MessageContent = string | AnalysisResult;

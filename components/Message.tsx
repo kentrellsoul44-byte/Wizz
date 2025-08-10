@@ -5,6 +5,7 @@ import { RegenerateIcon } from './icons/RegenerateIcon';
 import { CopyIcon } from './icons/CopyIcon';
 import { CheckIcon } from './icons/CheckIcon';
 import { QuickProfitDisplay } from './QuickProfitDisplay';
+import { ConfidenceDisplay } from './ConfidenceDisplay';
 
 const UserIcon: React.FC = () => (
   <div className="w-8 h-8 rounded-full bg-accent-blue flex items-center justify-center font-bold text-white flex-shrink-0">
@@ -64,7 +65,13 @@ const AnalysisCard: React.FC<{ result: AnalysisResult }> = ({ result }) => {
         if (result.riskRewardRatio) {
             textToCopy += `Risk/Reward Ratio: ${result.riskRewardRatio}\n`;
         }
-        textToCopy += `AI Confidence Score: ${result.overallConfidenceScore}/100`;
+        if (result.calibratedConfidence) {
+            const cc = result.calibratedConfidence;
+            textToCopy += `Enhanced Confidence: ${cc.overallScore}% ±${cc.interval.uncertainty}% (${cc.interval.reliability.toLowerCase()} reliability)\n`;
+            textToCopy += `Factors - Technical: ${cc.factors.technicalConfluence}%, Historical: ${cc.factors.historicalPatternSuccess}%, Market: ${cc.factors.marketConditions}%`;
+        } else {
+            textToCopy += `AI Confidence Score: ${result.overallConfidenceScore}/100`;
+        }
 
         navigator.clipboard.writeText(textToCopy).then(() => {
             setIsCopied(true);
@@ -372,20 +379,30 @@ const AnalysisCard: React.FC<{ result: AnalysisResult }> = ({ result }) => {
                   </div>
               )}
 
-              {/* Verification Section */}
+              {/* Enhanced Confidence & Verification Section */}
               <div>
                   <h3 className="font-semibold text-text-primary mb-2">
                       {result.isMultiTimeframeAnalysis ? 'Final Verification' : 'Verification'}
                   </h3>
-                  <div className="bg-input-bg-50 p-3 rounded-lg space-y-2">
-                      <div className="flex justify-between items-center">
-                          <span className="text-sm font-medium text-text-secondary">AI Confidence Score</span>
-                          <span className="text-lg font-bold text-text-primary">{result.overallConfidenceScore}/100</span>
+                  
+                  {/* Enhanced confidence display if available, otherwise fallback to basic */}
+                  {result.calibratedConfidence ? (
+                      <ConfidenceDisplay calibratedConfidence={result.calibratedConfidence} className="mb-3" />
+                  ) : (
+                      <div className="bg-input-bg-50 p-3 rounded-lg space-y-2 mb-3">
+                          <div className="flex justify-between items-center">
+                              <span className="text-sm font-medium text-text-secondary">AI Confidence Score</span>
+                              <span className="text-lg font-bold text-text-primary">{result.overallConfidenceScore}/100</span>
+                          </div>
+                          <div className="w-full bg-border-color rounded-full h-2.5">
+                              <div className="bg-accent-blue h-2.5 rounded-full" style={{ width: `${result.overallConfidenceScore}%` }}></div>
+                          </div>
                       </div>
-                      <div className="w-full bg-border-color rounded-full h-2.5">
-                          <div className="bg-accent-blue h-2.5 rounded-full" style={{ width: `${result.overallConfidenceScore}%` }}></div>
-                      </div>
-                      <p className="text-xs text-text-secondary pt-1">{result.verificationSummary}</p>
+                  )}
+                  
+                  {/* Verification Summary */}
+                  <div className="bg-input-bg-50 p-3 rounded-lg">
+                      <p className="text-xs text-text-secondary">{result.verificationSummary}</p>
                   </div>
               </div>
             </div>
