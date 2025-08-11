@@ -250,7 +250,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode }) => {
         setIsLoading(false);
         abortControllerRef.current = null;
     }
-  }, [activeSession, updateSession, updateSessionTitle, isUltraMode, isQuickProfitMode]);
+  }, [activeSession, updateSession, updateSessionTitle, isUltraMode]);
 
   const handleSendMultiTimeframeMessage = useCallback(async (prompt: string, timeframeImages: TimeframeImageData[]) => {
     if (!activeSession || (!prompt && (!timeframeImages || timeframeImages.length === 0))) return;

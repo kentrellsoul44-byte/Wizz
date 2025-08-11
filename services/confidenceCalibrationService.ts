@@ -266,41 +266,7 @@ export class ConfidenceCalibrationService {
   private static calculateMarketConditionsFactor(analysisResult: AnalysisResult): number {
     let conditionsScore = 50; // Neutral market conditions
     
-    // Quick profit analysis market conditions
-    if (analysisResult.quickProfitAnalysis) {
-      const qp = analysisResult.quickProfitAnalysis;
-      
-      // Volatility impact
-      switch (qp.marketConditions.volatility) {
-        case 'LOW': conditionsScore += 15; break;
-        case 'MEDIUM': conditionsScore += 5; break;
-        case 'HIGH': conditionsScore -= 10; break;
-        case 'EXTREME': conditionsScore -= 20; break;
-      }
-      
-      // Trend strength impact
-      switch (qp.marketConditions.trendStrength) {
-        case 'VERY_STRONG': conditionsScore += 20; break;
-        case 'STRONG': conditionsScore += 12; break;
-        case 'MODERATE': conditionsScore += 5; break;
-        case 'WEAK': conditionsScore -= 8; break;
-      }
-      
-      // Support/resistance distance
-      switch (qp.marketConditions.supportResistanceDistance) {
-        case 'FAR': conditionsScore += 10; break;
-        case 'MEDIUM': conditionsScore += 3; break;
-        case 'CLOSE': conditionsScore -= 8; break;
-      }
-      
-      // Recent price action
-      switch (qp.marketConditions.recentPriceAction) {
-        case 'BREAKOUT': conditionsScore += 15; break;
-        case 'CONTINUATION': conditionsScore += 8; break;
-        case 'CONSOLIDATING': conditionsScore -= 5; break;
-        case 'REVERSAL': conditionsScore -= 3; break;
-      }
-    }
+
     
     // Pattern-based market condition assessment
     if (analysisResult.patternAnalysis) {
@@ -337,9 +303,7 @@ export class ConfidenceCalibrationService {
     // Extract volatility indicators from various sources
     let detectedVolatility: 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME' = 'MEDIUM';
     
-    if (analysisResult.quickProfitAnalysis) {
-      detectedVolatility = analysisResult.quickProfitAnalysis.marketConditions.volatility;
-    } else if (analysisResult.patternAnalysis) {
+    if (analysisResult.patternAnalysis) {
       detectedVolatility = analysisResult.patternAnalysis.marketCondition.volatility;
     }
     
@@ -630,13 +594,7 @@ export class ConfidenceCalibrationService {
     let liquidityDiscount = 0;
     let newsRisk = 0;
     
-    // Volatility penalty
-    if (analysisResult.quickProfitAnalysis) {
-      switch (analysisResult.quickProfitAnalysis.marketConditions.volatility) {
-        case 'HIGH': volatilityPenalty = 8; break;
-        case 'EXTREME': volatilityPenalty = 15; break;
-      }
-    }
+
     
     // Liquidity discount (simulated)
     const currentHour = new Date().getHours();
@@ -689,7 +647,7 @@ export class ConfidenceCalibrationService {
     if (analysisResult.multiTimeframeContext) quality += 15;
     if (analysisResult.smcAnalysis) quality += 10;
     if (analysisResult.patternAnalysis) quality += 10;
-    if (analysisResult.quickProfitAnalysis) quality += 5;
+
     
     return Math.min(100, quality);
   }
@@ -723,13 +681,7 @@ export class ConfidenceCalibrationService {
   private static assessMarketNoise(analysisResult: AnalysisResult): number {
     let noise = 30; // Base noise level
     
-    if (analysisResult.quickProfitAnalysis) {
-      switch (analysisResult.quickProfitAnalysis.marketConditions.volatility) {
-        case 'LOW': noise -= 10; break;
-        case 'HIGH': noise += 15; break;
-        case 'EXTREME': noise += 25; break;
-      }
-    }
+
     
     // Pattern analysis can reduce perceived noise
     if (analysisResult.patternAnalysis?.patternConfluence.confidenceScore > 70) {
