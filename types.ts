@@ -902,3 +902,129 @@ export interface StopLossPerformanceMetrics {
     neutralAdjustments: number;
   };
 }
+
+// Market Regime Detection Types
+export type MarketTrendRegime = 'STRONG_BULL' | 'WEAK_BULL' | 'NEUTRAL' | 'WEAK_BEAR' | 'STRONG_BEAR';
+export type MarketDirectionRegime = 'TRENDING' | 'RANGING' | 'TRANSITIONAL';
+export type VolatilityRegime = 'LOW' | 'NORMAL' | 'HIGH' | 'EXTREME';
+export type MomentumRegime = 'ACCELERATING' | 'DECELERATING' | 'STABLE' | 'CHOPPY';
+
+export interface VolatilityMetrics {
+  atr: number; // Average True Range
+  atrNormalized: number; // ATR as percentage of price
+  standardDeviation: number;
+  volatilityPercentile: number; // Historical percentile (0-100)
+  regime: VolatilityRegime;
+  isVolatilityCluster: boolean; // Whether we're in a high volatility cluster
+}
+
+export interface TrendMetrics {
+  adx: number; // Average Directional Index (0-100)
+  trendStrength: 'VERY_WEAK' | 'WEAK' | 'MODERATE' | 'STRONG' | 'VERY_STRONG';
+  direction: 'UP' | 'DOWN' | 'SIDEWAYS';
+  consistency: number; // 0-100, how consistent the trend is
+  trendAge: number; // Days since trend started
+  regime: MarketTrendRegime;
+}
+
+export interface RangingMetrics {
+  efficiency: number; // Price movement efficiency (0-100)
+  consolidationStrength: number; // How well price respects range bounds
+  breakoutProbability: number; // 0-100
+  rangeQuality: 'POOR' | 'FAIR' | 'GOOD' | 'EXCELLENT';
+  supportResistanceStrength: number; // 0-100
+}
+
+export interface MomentumMetrics {
+  rsi: number;
+  macd: {
+    line: number;
+    signal: number;
+    histogram: number;
+  };
+  roc: number; // Rate of Change
+  divergenceDetected: boolean;
+  regime: MomentumRegime;
+  momentumShift: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+}
+
+export interface MarketRegimeContext {
+  timestamp: string;
+  timeframe: TimeframeType;
+  
+  // Primary regime classifications
+  trendRegime: MarketTrendRegime;
+  directionRegime: MarketDirectionRegime;
+  volatilityRegime: VolatilityRegime;
+  momentumRegime: MomentumRegime;
+  
+  // Detailed metrics
+  volatilityMetrics: VolatilityMetrics;
+  trendMetrics: TrendMetrics;
+  rangingMetrics: RangingMetrics;
+  momentumMetrics: MomentumMetrics;
+  
+  // Overall assessment
+  overallRegime: 'BULL_TRENDING' | 'BULL_RANGING' | 'BEAR_TRENDING' | 'BEAR_RANGING' | 
+                 'NEUTRAL_TRENDING' | 'NEUTRAL_RANGING' | 'TRANSITIONAL' | 'UNCERTAIN';
+  confidence: number; // 0-100
+  stability: number; // 0-100, how stable the current regime is
+  
+  // Context for analysis adjustments
+  analysisAdjustments: {
+    riskMultiplier: number; // Adjust position sizing based on volatility
+    stopLossAdjustment: number; // Tighter/looser stops based on regime
+    takeProfitAdjustment: number; // Adjust targets based on trend strength
+    timeframeBias: 'LOWER' | 'HIGHER' | 'NONE'; // Suggest different timeframes
+    entryApproach: 'AGGRESSIVE' | 'CONSERVATIVE' | 'PATIENT' | 'SCALPING';
+  };
+  
+  // Historical context
+  regimeHistory: {
+    previousRegime: string;
+    timeInCurrentRegime: number; // Hours/days
+    averageRegimeDuration: number;
+    recentRegimeChanges: number; // Count in last period
+  };
+  
+  // Warnings and opportunities
+  warnings: string[];
+  opportunities: string[];
+  nextReviewTime: string; // When to reassess regime
+}
+
+export interface RegimeDetectionConfig {
+  lookbackPeriod: number; // Days of historical data to analyze
+  updateFrequency: number; // Minutes between updates
+  volatilityWindow: number; // Period for volatility calculations
+  trendWindow: number; // Period for trend calculations
+  momentumWindow: number; // Period for momentum calculations
+  
+  thresholds: {
+    volatility: {
+      low: number;
+      normal: number;
+      high: number;
+    };
+    trend: {
+      weak: number;
+      moderate: number;
+      strong: number;
+    };
+    ranging: {
+      efficiency: number;
+      consolidation: number;
+    };
+  };
+}
+
+export interface RegimeTransition {
+  id: string;
+  fromRegime: string;
+  toRegime: string;
+  transitionTime: string;
+  confidence: number;
+  triggerFactors: string[];
+  expectedDuration: number; // Expected time in new regime (hours)
+  marketImpact: 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME';
+}
