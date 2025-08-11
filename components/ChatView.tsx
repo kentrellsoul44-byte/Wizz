@@ -27,15 +27,13 @@ function sanitizeJsonResponse(text: string): string {
 
 interface ChatViewProps {
     defaultUltraMode: boolean;
-    defaultQuickProfitMode: boolean;
 }
 
-export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode, defaultQuickProfitMode }) => {
+export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode }) => {
   const { activeSession, updateSession, updateSessionTitle } = useSession();
   const [isLoading, setIsLoading] = useState(false);
   const [initialPrompt, setInitialPrompt] = useState<{key: number, text: string}>({key: 0, text: ''});
   const [isUltraMode, setIsUltraMode] = useState(defaultUltraMode);
-  const [isQuickProfitMode, setIsQuickProfitMode] = useState(defaultQuickProfitMode);
   const [currentMarketRegime, setCurrentMarketRegime] = useState<MarketRegimeContext | null>(null);
   const [showRegimeDisplay, setShowRegimeDisplay] = useState(true);
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -161,7 +159,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode, defaultQui
 
     let fullResponseText = '';
     try {
-        const stream = analyzeChartStream(activeSession.messages, prompt, images, abortControllerRef.current.signal, isUltraMode, isQuickProfitMode);
+        const stream = analyzeChartStream(activeSession.messages, prompt, images, abortControllerRef.current.signal, isUltraMode);
         for await (const chunk of stream) {
             if (abortControllerRef.current?.signal.aborted) break;
             fullResponseText += chunk;
@@ -313,7 +311,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode, defaultQui
 
     let fullResponseText = '';
     try {
-        const stream = analyzeMultiTimeframeStream(activeSession.messages, prompt, timeframeImages, abortControllerRef.current.signal, isUltraMode, isQuickProfitMode);
+        const stream = analyzeMultiTimeframeStream(activeSession.messages, prompt, timeframeImages, abortControllerRef.current.signal, isUltraMode);
         for await (const chunk of stream) {
             if (abortControllerRef.current?.signal.aborted) break;
             fullResponseText += chunk;
@@ -401,7 +399,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode, defaultQui
         setIsLoading(false);
         abortControllerRef.current = null;
     }
-  }, [activeSession, updateSession, updateSessionTitle, isUltraMode, isQuickProfitMode]);
+  }, [activeSession, updateSession, updateSessionTitle, isUltraMode]);
 
   const handleSendSMCMessage = useCallback(async (prompt: string, images: ImageData[]) => {
     if (!activeSession || (!prompt && (!images || images.length === 0))) return;
@@ -461,7 +459,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode, defaultQui
 
     let fullResponseText = '';
     try {
-        const stream = analyzeSMCStream(activeSession.messages, prompt, images, abortControllerRef.current.signal, isUltraMode, isQuickProfitMode);
+        const stream = analyzeSMCStream(activeSession.messages, prompt, images, abortControllerRef.current.signal, isUltraMode);
         for await (const chunk of stream) {
             if (abortControllerRef.current?.signal.aborted) break;
             fullResponseText += chunk;
@@ -552,7 +550,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode, defaultQui
         setIsLoading(false);
         abortControllerRef.current = null;
     }
-     }, [activeSession, updateSession, updateSessionTitle, isUltraMode, isQuickProfitMode]);
+     }, [activeSession, updateSession, updateSessionTitle, isUltraMode]);
 
   const handleSendAdvancedPatternMessage = useCallback(async (prompt: string, images: ImageData[]) => {
     if (!activeSession || (!prompt && (!images || images.length === 0))) return;
@@ -612,7 +610,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode, defaultQui
 
     let fullResponseText = '';
     try {
-        const stream = analyzeAdvancedPatternsStream(activeSession.messages, prompt, images, abortControllerRef.current.signal, isUltraMode, isQuickProfitMode);
+        const stream = analyzeAdvancedPatternsStream(activeSession.messages, prompt, images, abortControllerRef.current.signal, isUltraMode);
         for await (const chunk of stream) {
             if (abortControllerRef.current?.signal.aborted) break;
             fullResponseText += chunk;
@@ -700,7 +698,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode, defaultQui
         setIsLoading(false);
         abortControllerRef.current = null;
     }
-  }, [activeSession, updateSession, updateSessionTitle, isUltraMode, isQuickProfitMode]);
+  }, [activeSession, updateSession, updateSessionTitle, isUltraMode]);
 
   const handleSendProgressiveMessage = useCallback(async (
     prompt: string, 
@@ -864,7 +862,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode, defaultQui
       setIsLoading(false);
       abortControllerRef.current = null;
     }
-  }, [activeSession, updateSession, updateSessionTitle, isUltraMode, isQuickProfitMode]);
+  }, [activeSession, updateSession, updateSessionTitle, isUltraMode]);
 
   const handleRegenerateResponse = useCallback(async () => {
     if (!activeSession || isLoading) return;
@@ -933,7 +931,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode, defaultQui
 
     let fullResponseText = '';
     try {
-        const stream = analyzeChartStream(historyForStream, prompt, images, abortControllerRef.current.signal, isUltraMode, isQuickProfitMode);
+        const stream = analyzeChartStream(historyForStream, prompt, images, abortControllerRef.current.signal, isUltraMode);
         for await (const chunk of stream) {
             if (abortControllerRef.current?.signal.aborted) break;
             fullResponseText += chunk;
@@ -1009,7 +1007,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode, defaultQui
         setIsLoading(false);
         abortControllerRef.current = null;
     }
-  }, [activeSession, updateSession, isLoading, isUltraMode, isQuickProfitMode]);
+  }, [activeSession, updateSession, isLoading, isUltraMode]);
 
 
   if (!activeSession) return null; // Should be handled by parent, but good practice
@@ -1046,8 +1044,6 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode, defaultQui
               initialPrompt={initialPrompt.text}
               isUltraMode={isUltraMode}
               onToggleUltraMode={() => setIsUltraMode(prev => !prev)}
-              isQuickProfitMode={isQuickProfitMode}
-              onToggleQuickProfitMode={() => setIsQuickProfitMode(prev => !prev)}
           />
         </div>
       </div>

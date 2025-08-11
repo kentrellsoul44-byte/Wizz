@@ -1,6 +1,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import type { ChatMessage, ImageData, TimeframeImageData, MarketRegimeContext } from "../types";
-import { QuickProfitService } from "./quickProfitService";
+
 import { ConfidenceCalibrationService } from "./confidenceCalibrationService";
 import { MarketRegimeDetectionService } from "./marketRegimeDetectionService";
 
@@ -1045,8 +1045,7 @@ export async function* analyzeMultiTimeframeStream(
     prompt: string, 
     timeframeImages: TimeframeImageData[], 
     signal: AbortSignal, 
-    isUltraMode: boolean,
-    isQuickProfitMode: boolean
+    isUltraMode: boolean
 ): AsyncGenerator<string> {
     const turnBasedHistory = history
         .filter(msg => msg.role === 'user' || (msg.role === 'assistant' && msg.rawResponse))
@@ -1156,7 +1155,7 @@ export async function* analyzeMultiTimeframeStream(
     }
 }
 
-export async function* analyzeChartStream(history: ChatMessage[], prompt: string, images: ImageData[], signal: AbortSignal, isUltraMode: boolean, isQuickProfitMode: boolean): AsyncGenerator<string> {
+export async function* analyzeChartStream(history: ChatMessage[], prompt: string, images: ImageData[], signal: AbortSignal, isUltraMode: boolean): AsyncGenerator<string> {
     const turnBasedHistory = history
         .filter(msg => msg.role === 'user' || (msg.role === 'assistant' && msg.rawResponse))
         .map(msg => {
@@ -1298,19 +1297,7 @@ export async function* analyzeChartStream(history: ChatMessage[], prompt: string
                         isUltraMode
                     );
                     
-                    // Apply Quick Profit analysis if enabled
-                    if (isQuickProfitMode && analysisResult.trade && analysisResult.signal !== 'NEUTRAL') {
-                        const quickProfitAnalysis = QuickProfitService.analyzeQuickProfitPercentage(analysisResult);
-                        const updatedTrade = QuickProfitService.applyQuickProfitToTrade(
-                            analysisResult.trade, 
-                            quickProfitAnalysis.recommendedPercentage
-                        );
-                        
-                        // Update the analysis result
-                        analysisResult.trade = updatedTrade;
-                        analysisResult.quickProfitAnalysis = quickProfitAnalysis;
-                        analysisResult.isQuickProfitMode = true;
-                    }
+
                     
                     // Yield the updated result
                     const updatedResponse = JSON.stringify(analysisResult, null, 0);
@@ -1355,8 +1342,7 @@ export async function* analyzeSMCStream(
     prompt: string, 
     images: ImageData[], 
     signal: AbortSignal, 
-    isUltraMode: boolean,
-    isQuickProfitMode: boolean
+    isUltraMode: boolean
 ): AsyncGenerator<string> {
     const turnBasedHistory = history
         .filter(msg => msg.role === 'user' || (msg.role === 'assistant' && msg.rawResponse))
@@ -1480,8 +1466,7 @@ export async function* analyzeAdvancedPatternsStream(
     prompt: string, 
     images: ImageData[], 
     signal: AbortSignal, 
-    isUltraMode: boolean,
-    isQuickProfitMode: boolean
+    isUltraMode: boolean
 ): AsyncGenerator<string> {
     const turnBasedHistory = history
         .filter(msg => msg.role === 'user' || (msg.role === 'assistant' && msg.rawResponse))
