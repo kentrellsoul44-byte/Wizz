@@ -711,15 +711,93 @@ Original request: ${originalPrompt}
   }
 
   private sanitizeJsonResponse(text: string): string {
-    // Find JSON content between first { and last }
-    const firstBrace = text.indexOf('{');
-    const lastBrace = text.lastIndexOf('}');
-    
-    if (firstBrace === -1 || lastBrace === -1 || firstBrace >= lastBrace) {
-      throw new Error('No valid JSON found in response');
+    const input = (text ?? '').trim();
+    if (!input) throw new Error('Empty response');
+
+    const firstFence = input.match(/^```(?:json)?\s*([\s\S]*?)```\s*$/i);
+    const body = (firstFence ? firstFence[1] : input).trim();
+
+    const candidates: string[] = [];
+    const lastClose = body.lastIndexOf('}');
+    const firstOpen = body.indexOf('{');
+    if (firstOpen !== -1 && lastClose !== -1 && lastClose > firstOpen) {
+      candidates.push(body.slice(firstOpen, lastClose + 1));
+      let found = 0;
+      for (let i = lastClose; i >= 0 && found < 3; i--) {
+        if (body[i] === '{') {
+          candidates.push(body.slice(i, lastClose + 1));
+          found++;
+        }
+      }
+    } else if (firstOpen !== -1) {
+      candidates.push(body.slice(firstOpen));
+    } else {
+      candidates.push(body);
     }
-    
-    return text.substring(firstBrace, lastBrace + 1);
+
+    for (const cand of candidates) {
+      const fixed = this.tryFixJson(cand);
+      if (fixed) return fixed;
+    }
+
+    throw new Error('No valid JSON found in response');
+  }
+
+  private tryFixJson(raw: string): string | null {
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+
+    const attempts: string[] = [];
+    attempts.push(trimmed);
+    attempts.push(trimmed.replace(/,\s*([}\]])/g, '$1'));
+    attempts.push(this.balanceJsonBrackets(trimmed));
+
+    for (const a of attempts) {
+      try {
+        JSON.parse(a);
+        return a;
+      } catch {}
+    }
+    return null;
+  }
+
+  private balanceJsonBrackets(s: string): string {
+    let inString = false;
+    let escaping = false;
+    let openBraces = 0;
+    let openBrackets = 0;
+
+    for (let i = 0; i < s.length; i++) {
+      const ch = s[i];
+      if (inString) {
+        if (escaping) {
+          escaping = false;
+        } else if (ch === '\\') {
+          escaping = true;
+        } else if (ch === '"') {
+          inString = false;
+        }
+        continue;
+      }
+
+      if (ch === '"') {
+        inString = true;
+      } else if (ch === '{') {
+        openBraces++;
+      } else if (ch === '}') {
+        openBraces = Math.max(0, openBraces - 1);
+      } else if (ch === '[') {
+        openBrackets++;
+      } else if (ch === ']') {
+        openBrackets = Math.max(0, openBrackets - 1);
+      }
+    }
+
+    let result = s;
+    if (inString) result += '"';
+    if (openBrackets > 0) result += ']'.repeat(openBrackets);
+    if (openBraces > 0) result += '}'.repeat(openBraces);
+    return result;
   }
 
   // ========================================
