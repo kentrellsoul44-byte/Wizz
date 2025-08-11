@@ -12,8 +12,6 @@ interface ChatInputProps {
   onSendMessage: (prompt: string, images: ImageData[]) => void;
   onSendMultiTimeframeMessage?: (prompt: string, timeframeImages: TimeframeImageData[]) => void;
   onSendSMCMessage?: (prompt: string, images: ImageData[]) => void;
-  onSendAdvancedPatternMessage?: (prompt: string, images: ImageData[]) => void;
-  onSendProgressiveMessage?: (prompt: string, images: ImageData[], analysisType: 'STANDARD' | 'MULTI_TIMEFRAME' | 'SMC' | 'ADVANCED_PATTERN') => void;
   isLoading: boolean;
   onStopGeneration: () => void;
   initialPrompt?: string;
@@ -50,8 +48,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   onSendMessage, 
   onSendMultiTimeframeMessage,
   onSendSMCMessage,
-  onSendAdvancedPatternMessage,
-  onSendProgressiveMessage,
   isLoading, 
   onStopGeneration, 
   initialPrompt, 
@@ -63,9 +59,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [isUltraMenuOpen, setIsUltraMenuOpen] = useState(false);
   const [isMultiTimeframeMode, setIsMultiTimeframeMode] = useState(false);
-  const [isSMCMode, setIsSMCMode] = useState(false);
-  const [isAdvancedPatternMode, setIsAdvancedPatternMode] = useState(false);
-  const [isProgressiveMode, setIsProgressiveMode] = useState(false);
   const [timeframeImages, setTimeframeImages] = useState<TimeframeImageData[]>([]);
   const [autoMultiTimeframe, setAutoMultiTimeframe] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -165,38 +158,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   const handleSend = async () => {
-    if (isProgressiveMode) {
-      if ((!prompt.trim() && imageFiles.length === 0 && timeframeImages.length === 0) || isLoading) return;
-
-      if (onSendProgressiveMessage) {
-        let analysisType: 'STANDARD' | 'MULTI_TIMEFRAME' | 'SMC' | 'ADVANCED_PATTERN' = 'STANDARD';
-        let imagesData: ImageData[] = [];
-        
-        if (isMultiTimeframeMode || autoMultiTimeframe) {
-          analysisType = 'MULTI_TIMEFRAME';
-          // For multi-timeframe progressive, we'll convert timeframe images to regular images
-          if (timeframeImages.length > 0) {
-            imagesData = timeframeImages.map(tf => tf.imageData);
-          }
-        } else {
-          if (isSMCMode || isUltraMode) analysisType = 'SMC';
-          else if (isAdvancedPatternMode) analysisType = 'ADVANCED_PATTERN';
-          
-          if (imageFiles.length > 0) {
-            imagesData = await Promise.all(imageFiles.map(fileToImageData));
-          }
-        }
-        
-        onSendProgressiveMessage(prompt, imagesData, analysisType);
-        setPrompt('');
-        setImageFiles([]);
-        setImagePreviews([]);
-        setTimeframeImages([]);
-        if(fileInputRef.current) {
-          fileInputRef.current.value = "";
-        }
-      }
-    } else if (isMultiTimeframeMode || autoMultiTimeframe) {
+    if (isMultiTimeframeMode || autoMultiTimeframe) {
       if ((!prompt.trim() && timeframeImages.length === 0) || isLoading) return;
       
       if (onSendMultiTimeframeMessage) {
@@ -204,40 +166,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         setPrompt('');
         setTimeframeImages([]);
         setAutoMultiTimeframe(false);
-      }
-    } else if (isSMCMode) {
-      if ((!prompt.trim() && imageFiles.length === 0) || isLoading) return;
-
-      let imagesData: ImageData[] = [];
-      if (imageFiles.length > 0) {
-          imagesData = await Promise.all(imageFiles.map(fileToImageData));
-      }
-      
-      if (onSendSMCMessage) {
-        onSendSMCMessage(prompt, imagesData);
-        setPrompt('');
-        setImageFiles([]);
-        setImagePreviews([]);
-        if(fileInputRef.current) {
-            fileInputRef.current.value = "";
-        }
-      }
-    } else if (isAdvancedPatternMode) {
-      if ((!prompt.trim() && imageFiles.length === 0) || isLoading) return;
-
-      let imagesData: ImageData[] = [];
-      if (imageFiles.length > 0) {
-          imagesData = await Promise.all(imageFiles.map(fileToImageData));
-      }
-      
-      if (onSendAdvancedPatternMessage) {
-        onSendAdvancedPatternMessage(prompt, imagesData);
-        setPrompt('');
-        setImageFiles([]);
-        setImagePreviews([]);
-        if(fileInputRef.current) {
-            fileInputRef.current.value = "";
-        }
       }
     } else if (isUltraMode && imageFiles.length > 0) {
       // Ultra mode automatically uses SMC analysis
@@ -368,79 +296,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                         
 
                          
-                                                   <div className="flex items-center justify-between border-t border-border-color pt-3">
-                              <div>
-                                  <h4 className="font-semibold text-text-primary">Smart Money Concepts</h4>
-                                  <p className="text-xs text-text-secondary">Advanced SMC analysis</p>
-                              </div>
-                              <label htmlFor="smc-toggle" className="relative inline-flex items-center cursor-pointer">
-                                  <input 
-                                      type="checkbox" 
-                                      id="smc-toggle" 
-                                      className="sr-only peer" 
-                                      checked={isSMCMode} 
-                                      onChange={(e) => {
-                                        setIsSMCMode(e.target.checked);
-                                        if (e.target.checked) {
-                                          setIsMultiTimeframeMode(false);
-                                          setIsAdvancedPatternMode(false);
-                                        }
-                                      }} 
-                                  />
-                                  <div className="w-11 h-6 bg-border-color peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-offset-2 peer-focus:ring-accent-blue peer-focus:ring-offset-sidebar-bg rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-blue"></div>
-                              </label>
-                          </div>
-                          
-                          <div className="flex items-center justify-between border-t border-border-color pt-3">
-                              <div>
-                                  <h4 className="font-semibold text-text-primary">Advanced Patterns</h4>
-                                  <p className="text-xs text-text-secondary">Wyckoff, Elliott Wave, Harmonics</p>
-                              </div>
-                              <label htmlFor="pattern-toggle" className="relative inline-flex items-center cursor-pointer">
-                                  <input 
-                                      type="checkbox" 
-                                      id="pattern-toggle" 
-                                      className="sr-only peer" 
-                                      checked={isAdvancedPatternMode} 
-                                      onChange={(e) => {
-                                        setIsAdvancedPatternMode(e.target.checked);
-                                        if (e.target.checked) {
-                                          setIsMultiTimeframeMode(false);
-                                          setIsSMCMode(false);
-                                        }
-                                      }} 
-                                  />
-                                  <div className="w-11 h-6 bg-border-color peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-offset-2 peer-focus:ring-accent-blue peer-focus:ring-offset-sidebar-bg rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-blue"></div>
-                              </label>
-                          </div>
-                          
-                          <div className="flex items-center justify-between border-t border-border-color pt-3">
-                              <div>
-                                  <h4 className="font-semibold text-text-primary">Progressive Analysis</h4>
-                                  <p className="text-xs text-text-secondary">Stream results in phases (30%→70%→100%)</p>
-                              </div>
-                              <label htmlFor="progressive-toggle" className="relative inline-flex items-center cursor-pointer">
-                                  <input 
-                                      type="checkbox" 
-                                      id="progressive-toggle" 
-                                      className="sr-only peer" 
-                                      checked={isProgressiveMode} 
-                                      onChange={(e) => {
-                                        setIsProgressiveMode(e.target.checked);
-                                      }} 
-                                  />
-                                  <div className="w-11 h-6 bg-border-color peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-offset-2 peer-focus:ring-accent-blue peer-focus:ring-offset-sidebar-bg rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-blue"></div>
-                              </label>
-                          </div>
+
                     </div>
                                          <p className="text-xs text-text-secondary mt-2 border-t border-border-color pt-2">
-                         {isProgressiveMode
-                             ? 'Progressive analysis streams results in real-time: Quick overview (30% confidence) → Detailed analysis (70% confidence) → Final verification (100% confidence).'
-                             : isSMCMode
-                             ? 'Advanced Smart Money Concepts analysis with order blocks, FVGs, and liquidity detection.'
-                             : isAdvancedPatternMode
-                             ? 'Institutional-grade pattern recognition: Wyckoff Method, Elliott Wave, Harmonic Patterns, and Volume Profile.'
-                             : isUltraMode
+                         {isUltraMode
                              ? 'Ultra mode combines advanced analysis techniques including Smart Money Concepts, pattern recognition, and enhanced confidence calibration for maximum accuracy.'
                              : 'Multi-timeframe analysis is automatically detected when multiple charts are uploaded. Upload charts from different timeframes (1H, 4H, 1D) for better confluence analysis.'
                          }

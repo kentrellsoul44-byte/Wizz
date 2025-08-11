@@ -1,10 +1,9 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import type { ChatMessage, ImageData, AnalysisResult, MessageContent, TimeframeImageData, ProgressiveStreamEvent, MarketRegimeContext } from '../types';
+import type { ChatMessage, ImageData, AnalysisResult, MessageContent, TimeframeImageData, MarketRegimeContext } from '../types';
 import { ChatInput } from './ChatInput';
 import { Message } from './Message';
 import { MarketRegimeDisplay } from './MarketRegimeDisplay';
-import { analyzeChartStream, analyzeMultiTimeframeStream, analyzeSMCStream, analyzeAdvancedPatternsStream } from '../services/geminiService';
-import { progressiveAnalysis } from '../services/progressiveAnalysisService';
+import { analyzeChartStream, analyzeMultiTimeframeStream, analyzeSMCStream } from '../services/geminiService';
 import { useSession } from '../contexts/SessionContext';
 import { EmptyChat } from './EmptyChat';
 import { buildCacheKey } from '../services/determinismService';
@@ -1037,8 +1036,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode }) => {
               onSendMessage={handleSendMessage}
               onSendMultiTimeframeMessage={handleSendMultiTimeframeMessage}
               onSendSMCMessage={handleSendSMCMessage}
-              onSendAdvancedPatternMessage={handleSendAdvancedPatternMessage}
-              onSendProgressiveMessage={handleSendProgressiveMessage}
+
               isLoading={isLoading} 
               onStopGeneration={handleStopGeneration}
               initialPrompt={initialPrompt.text}
