@@ -49,13 +49,11 @@ async function retryWithBackoff<T>(operation: () => Promise<T>, maxRetries: numb
 export interface UserPreferences {
   theme: 'light' | 'dark';
   default_ultra_mode: boolean;
-  quick_profit_mode: boolean;
 }
 
 const defaultPreferences: UserPreferences = {
   theme: 'dark',
   default_ultra_mode: false,
-  quick_profit_mode: false,
 };
 
 export const getUserPreferences = async (userId: string): Promise<UserPreferences> => {
@@ -89,7 +87,7 @@ export const getUserPreferences = async (userId: string): Promise<UserPreference
   // a row should exist (unless the upsert failed due to a policy and no row existed before).
   let select = supabase
     .from('user_preferences')
-    .select('theme, default_ultra_mode, quick_profit_mode')
+    .select('theme, default_ultra_mode')
     .eq('user_id', userId)
     .maybeSingle(); // Use maybeSingle() instead of single() to handle missing rows gracefully
 
@@ -112,7 +110,6 @@ export const getUserPreferences = async (userId: string): Promise<UserPreference
     return {
       theme: retry.data.theme === 'light' ? 'light' : 'dark',
       default_ultra_mode: false,
-      quick_profit_mode: false,
     };
   }
 
@@ -133,7 +130,6 @@ export const getUserPreferences = async (userId: string): Promise<UserPreference
   return {
     theme: data.theme === 'light' ? 'light' : 'dark',
     default_ultra_mode: (data as any).default_ultra_mode ?? false,
-    quick_profit_mode: (data as any).quick_profit_mode ?? false,
   };
 };
 

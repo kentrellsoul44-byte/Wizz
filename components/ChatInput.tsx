@@ -6,6 +6,7 @@ import { StopIcon } from './icons/StopIcon';
 import { TuneIcon } from './icons/TuneIcon';
 import { canonicalizeImageToPngBytes, computeSha256Hex } from '../services/determinismService';
 import { MultiTimeframeInput } from './MultiTimeframeInput';
+import { MultiTimeframeDetectionService } from '../services/multiTimeframeDetectionService';
 
 interface ChatInputProps {
   onSendMessage: (prompt: string, images: ImageData[]) => void;
@@ -18,8 +19,6 @@ interface ChatInputProps {
   initialPrompt?: string;
   isUltraMode: boolean;
   onToggleUltraMode: () => void;
-  isQuickProfitMode: boolean;
-  onToggleQuickProfitMode: () => void;
 }
 
 const fileToImageData = async (file: File): Promise<ImageData> => {
@@ -57,9 +56,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   onStopGeneration, 
   initialPrompt, 
   isUltraMode, 
-  onToggleUltraMode,
-  isQuickProfitMode,
-  onToggleQuickProfitMode
+  onToggleUltraMode
 }) => {
   const [prompt, setPrompt] = useState('');
   const [imageFiles, setImageFiles] = useState<File[]>([]);
@@ -70,6 +67,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const [isAdvancedPatternMode, setIsAdvancedPatternMode] = useState(false);
   const [isProgressiveMode, setIsProgressiveMode] = useState(false);
   const [timeframeImages, setTimeframeImages] = useState<TimeframeImageData[]>([]);
+  const [autoMultiTimeframe, setAutoMultiTimeframe] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
   const ultraMenuRef = useRef<HTMLDivElement>(null);
@@ -91,7 +89,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const addFiles = (files: FileList | File[]) => {
+  const addFiles = async (files: FileList | File[]) => {
     const newFiles: File[] = [];
     const newPreviews: string[] = [];
     const existingNames = new Set(imageFiles.map(f => f.name + f.size));
@@ -103,6 +101,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       newFiles.push(file);
     }
     if (newFiles.length === 0) return;
+    
     // Generate previews
     newFiles.forEach(file => {
       const reader = new FileReader();
@@ -111,7 +110,29 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       };
       reader.readAsDataURL(file);
     });
-    setImageFiles(prev => [...prev, ...newFiles]);
+    
+    const updatedFiles = [...imageFiles, ...newFiles];
+    setImageFiles(updatedFiles);
+    
+    // Auto-detect multi-timeframe analysis
+    if (updatedFiles.length > 1 && !isMultiTimeframeMode) {
+      const imageDataArray: ImageData[] = [];
+      for (const file of updatedFiles) {
+        const imageData = await fileToImageData(file);
+        imageDataArray.push(imageData);
+      }
+      
+      const detection = MultiTimeframeDetectionService.shouldUseMultiTimeframeAnalysis(
+        imageDataArray, 
+        prompt
+      );
+      
+      if (detection) {
+        setAutoMultiTimeframe(true);
+        const defaultTimeframes = MultiTimeframeDetectionService.generateDefaultTimeframes(imageDataArray);
+        setTimeframeImages(defaultTimeframes);
+      }
+    }
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -151,14 +172,14 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         let analysisType: 'STANDARD' | 'MULTI_TIMEFRAME' | 'SMC' | 'ADVANCED_PATTERN' = 'STANDARD';
         let imagesData: ImageData[] = [];
         
-        if (isMultiTimeframeMode) {
+        if (isMultiTimeframeMode || autoMultiTimeframe) {
           analysisType = 'MULTI_TIMEFRAME';
           // For multi-timeframe progressive, we'll convert timeframe images to regular images
           if (timeframeImages.length > 0) {
             imagesData = timeframeImages.map(tf => tf.imageData);
           }
         } else {
-          if (isSMCMode) analysisType = 'SMC';
+          if (isSMCMode || isUltraMode) analysisType = 'SMC';
           else if (isAdvancedPatternMode) analysisType = 'ADVANCED_PATTERN';
           
           if (imageFiles.length > 0) {
@@ -175,13 +196,14 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           fileInputRef.current.value = "";
         }
       }
-    } else if (isMultiTimeframeMode) {
+    } else if (isMultiTimeframeMode || autoMultiTimeframe) {
       if ((!prompt.trim() && timeframeImages.length === 0) || isLoading) return;
       
       if (onSendMultiTimeframeMessage) {
         onSendMultiTimeframeMessage(prompt.trim(), timeframeImages);
         setPrompt('');
         setTimeframeImages([]);
+        setAutoMultiTimeframe(false);
       }
     } else if (isSMCMode) {
       if ((!prompt.trim() && imageFiles.length === 0) || isLoading) return;
@@ -210,6 +232,24 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       
       if (onSendAdvancedPatternMessage) {
         onSendAdvancedPatternMessage(prompt, imagesData);
+        setPrompt('');
+        setImageFiles([]);
+        setImagePreviews([]);
+        if(fileInputRef.current) {
+            fileInputRef.current.value = "";
+        }
+      }
+    } else if (isUltraMode && imageFiles.length > 0) {
+      // Ultra mode automatically uses SMC analysis
+      if ((!prompt.trim() && imageFiles.length === 0) || isLoading) return;
+
+      let imagesData: ImageData[] = [];
+      if (imageFiles.length > 0) {
+          imagesData = await Promise.all(imageFiles.map(fileToImageData));
+      }
+      
+      if (onSendSMCMessage) {
+        onSendSMCMessage(prompt, imagesData);
         setPrompt('');
         setImageFiles([]);
         setImagePreviews([]);
@@ -256,7 +296,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
          onDragOver={(e) => e.preventDefault()}
          onPaste={handlePaste}
     >
-      {!isMultiTimeframeMode && imagePreviews.length > 0 && (
+      {!(isMultiTimeframeMode || autoMultiTimeframe) && imagePreviews.length > 0 && (
         <div className="p-2 grid grid-cols-3 gap-2">
             {imagePreviews.map((src, idx) => (
               <div className="relative" key={idx}>
@@ -267,8 +307,15 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         </div>
       )}
       
-      {isMultiTimeframeMode && (
+      {(isMultiTimeframeMode || autoMultiTimeframe) && (
         <div className="p-3 border-b border-border-color">
+          {autoMultiTimeframe && (
+            <div className="mb-2 p-2 bg-blue-100 dark:bg-blue-900/30 rounded-md">
+              <p className="text-sm text-blue-800 dark:text-blue-200">
+                🎯 Auto-detected multi-timeframe analysis
+              </p>
+            </div>
+          )}
           <MultiTimeframeInput
             onTimeframeImagesChange={setTimeframeImages}
             disabled={isLoading}
@@ -276,7 +323,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         </div>
       )}
       <div className="flex items-start">
-        {!isMultiTimeframeMode && (
+        {!(isMultiTimeframeMode || autoMultiTimeframe) && (
           <button
             onClick={() => fileInputRef.current?.click()}
             className="p-2 text-text-secondary hover:text-text-primary self-center"
@@ -309,7 +356,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                         <div className="flex items-center justify-between">
                             <div>
                                 <h4 className="font-semibold text-text-primary">Wizz Ultra</h4>
-                                <p className="text-xs text-text-secondary">Advanced analysis mode</p>
+                                <p className="text-xs text-text-secondary">Advanced analysis mode with SMC & Patterns</p>
                             </div>
                             <label htmlFor="ultra-toggle" className="relative inline-flex items-center cursor-pointer">
                                 <input type="checkbox" id="ultra-toggle" className="sr-only peer" checked={isUltraMode} onChange={onToggleUltraMode} />
@@ -317,39 +364,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                             </label>
                         </div>
                         
-                        <div className="flex items-center justify-between border-t border-border-color pt-3">
-                            <div>
-                                <h4 className="font-semibold text-text-primary">Quick Profit Mode</h4>
-                                <p className="text-xs text-text-secondary">10%, 15%, 20%, 25% profit targets</p>
-                            </div>
-                            <label htmlFor="quick-profit-toggle" className="relative inline-flex items-center cursor-pointer">
-                                <input type="checkbox" id="quick-profit-toggle" className="sr-only peer" checked={isQuickProfitMode} onChange={onToggleQuickProfitMode} />
-                                <div className="w-11 h-6 bg-border-color peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-offset-2 peer-focus:ring-accent-blue peer-focus:ring-offset-sidebar-bg rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-blue"></div>
-                            </label>
-                        </div>
+
                         
-                                                 <div className="flex items-center justify-between border-t border-border-color pt-3">
-                             <div>
-                                 <h4 className="font-semibold text-text-primary">Multi-Timeframe</h4>
-                                 <p className="text-xs text-text-secondary">Analyze multiple timeframes</p>
-                             </div>
-                             <label htmlFor="multi-timeframe-toggle" className="relative inline-flex items-center cursor-pointer">
-                                 <input 
-                                     type="checkbox" 
-                                     id="multi-timeframe-toggle" 
-                                     className="sr-only peer" 
-                                     checked={isMultiTimeframeMode} 
-                                     onChange={(e) => {
-                                       setIsMultiTimeframeMode(e.target.checked);
-                                       if (e.target.checked) {
-                                         setIsSMCMode(false);
-                                         setIsAdvancedPatternMode(false);
-                                       }
-                                     }} 
-                                 />
-                                 <div className="w-11 h-6 bg-border-color peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-offset-2 peer-focus:ring-accent-blue peer-focus:ring-offset-sidebar-bg rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-blue"></div>
-                             </label>
-                         </div>
+
                          
                                                    <div className="flex items-center justify-between border-t border-border-color pt-3">
                               <div>
@@ -419,13 +436,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                                          <p className="text-xs text-text-secondary mt-2 border-t border-border-color pt-2">
                          {isProgressiveMode
                              ? 'Progressive analysis streams results in real-time: Quick overview (30% confidence) → Detailed analysis (70% confidence) → Final verification (100% confidence).'
-                             : isMultiTimeframeMode 
-                             ? 'Upload charts from different timeframes (1H, 4H, 1D) for better confluence analysis.'
                              : isSMCMode
                              ? 'Advanced Smart Money Concepts analysis with order blocks, FVGs, and liquidity detection.'
                              : isAdvancedPatternMode
                              ? 'Institutional-grade pattern recognition: Wyckoff Method, Elliott Wave, Harmonic Patterns, and Volume Profile.'
-                             : 'Provides a more detailed, multi-pass analysis for higher accuracy.'
+                             : isUltraMode
+                             ? 'Ultra mode combines advanced analysis techniques including Smart Money Concepts, pattern recognition, and enhanced confidence calibration for maximum accuracy.'
+                             : 'Multi-timeframe analysis is automatically detected when multiple charts are uploaded. Upload charts from different timeframes (1H, 4H, 1D) for better confluence analysis.'
                          }
                      </p>
                 </div>
