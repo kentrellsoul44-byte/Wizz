@@ -15,14 +15,103 @@ import { MarketRegimeDetectionService } from '../services/marketRegimeDetectionS
 
 function sanitizeJsonResponse(text: string): string {
   const input = (text ?? '').trim();
+  if (!input) throw new Error('Empty response');
+
+  // Strip code fences if present
   const fenced = input.match(/^```(?:json)?\s*([\s\S]*?)```\s*$/i);
-  const body = fenced ? fenced[1].trim() : input;
-  const first = body.indexOf('{');
-  const last = body.lastIndexOf('}');
-  if (first !== -1 && last !== -1 && last > first) {
-    return body.slice(first, last + 1);
+  const body = (fenced ? fenced[1] : input).trim();
+
+  // Collect candidate JSON slices, prioritizing the most plausible near the end
+  const candidates: string[] = [];
+  const lastClose = body.lastIndexOf('}');
+  const firstOpen = body.indexOf('{');
+  if (firstOpen !== -1 && lastClose !== -1 && lastClose > firstOpen) {
+    candidates.push(body.slice(firstOpen, lastClose + 1));
+    // Also try a few alternative starts scanning backwards to catch the final object
+    let found = 0;
+    for (let i = lastClose; i >= 0 && found < 3; i--) {
+      if (body[i] === '{') {
+        candidates.push(body.slice(i, lastClose + 1));
+        found++;
+      }
+    }
+  } else if (firstOpen !== -1) {
+    // No closing brace found; take from first open and try to repair
+    candidates.push(body.slice(firstOpen));
+  } else {
+    // As-is body as a last resort
+    candidates.push(body);
   }
-  return body;
+
+  // Try to fix and validate each candidate
+  for (const cand of candidates) {
+    const fixed = tryFixJson(cand);
+    if (fixed) return fixed;
+  }
+
+  throw new Error('No valid JSON found in response');
+}
+
+function tryFixJson(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  const attempts: string[] = [];
+  // 1) Direct
+  attempts.push(trimmed);
+  // 2) Remove trailing commas before } or ]
+  attempts.push(trimmed.replace(/,\s*([}\]])/g, '$1'));
+  // 3) Balance braces/brackets ignoring content inside strings
+  attempts.push(balanceJsonBrackets(trimmed));
+
+  for (const attempt of attempts) {
+    try {
+      JSON.parse(attempt);
+      return attempt;
+    } catch {}
+  }
+  return null;
+}
+
+function balanceJsonBrackets(s: string): string {
+  let inString = false;
+  let escaping = false;
+  let openBraces = 0;
+  let openBrackets = 0;
+
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (inString) {
+      if (escaping) {
+        escaping = false;
+      } else if (ch === '\\') {
+        escaping = true;
+      } else if (ch === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = true;
+    } else if (ch === '{') {
+      openBraces++;
+    } else if (ch === '}') {
+      openBraces = Math.max(0, openBraces - 1);
+    } else if (ch === '[') {
+      openBrackets++;
+    } else if (ch === ']') {
+      openBrackets = Math.max(0, openBrackets - 1);
+    }
+  }
+
+  let result = s;
+  // Close any unterminated string
+  if (inString) result += '"';
+  // Append missing closers
+  if (openBrackets > 0) result += ']'.repeat(openBrackets);
+  if (openBraces > 0) result += '}'.repeat(openBraces);
+  return result;
 }
 
 interface ChatViewProps {
