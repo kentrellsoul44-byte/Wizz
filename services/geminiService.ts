@@ -1,7 +1,8 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import type { ChatMessage, ImageData, TimeframeImageData } from "../types";
+import type { ChatMessage, ImageData, TimeframeImageData, MarketRegimeContext } from "../types";
 import { QuickProfitService } from "./quickProfitService";
 import { ConfidenceCalibrationService } from "./confidenceCalibrationService";
+import { MarketRegimeDetectionService } from "./marketRegimeDetectionService";
 
 const API_KEY = process.env.API_KEY;
 
@@ -10,6 +11,75 @@ if (!API_KEY) {
 }
 
 const ai = new GoogleGenAI({ apiKey: API_KEY });
+
+// Initialize regime detection service
+const regimeDetectionService = new MarketRegimeDetectionService();
+
+// Helper function to extract price data from chart context or generate mock data
+function generateMockPriceData(prompt: string): { prices: number[], volumes: number[] } {
+    // In a real implementation, this would extract actual price data from the chart
+    // For now, we'll generate realistic mock data based on common market patterns
+    const basePrice = 50000; // Mock Bitcoin price
+    const periods = 100;
+    const prices: number[] = [];
+    const volumes: number[] = [];
+    
+    // Generate realistic price movements
+    let currentPrice = basePrice;
+    for (let i = 0; i < periods; i++) {
+        // Add some randomness with trend bias based on prompt analysis
+        const volatility = 0.02; // 2% volatility
+        const trendBias = prompt.toLowerCase().includes('bull') ? 0.001 : 
+                         prompt.toLowerCase().includes('bear') ? -0.001 : 0;
+        
+        const change = (Math.random() - 0.5) * volatility + trendBias;
+        currentPrice = currentPrice * (1 + change);
+        prices.push(currentPrice);
+        
+        // Generate correlated volume
+        const baseVolume = 1000000;
+        const volumeVariation = Math.random() * 0.5 + 0.75; // 75-125% of base
+        volumes.push(baseVolume * volumeVariation);
+    }
+    
+    return { prices, volumes };
+}
+
+// Helper function to format regime context for AI
+function formatRegimeContext(regimeContext: MarketRegimeContext): string {
+    return `
+MARKET REGIME ANALYSIS:
+• Overall Regime: ${regimeContext.overallRegime} (${regimeContext.confidence}% confidence)
+• Trend Regime: ${regimeContext.trendRegime}
+• Direction Regime: ${regimeContext.directionRegime} 
+• Volatility Regime: ${regimeContext.volatilityRegime} (ATR: ${regimeContext.volatilityMetrics.atrNormalized.toFixed(2)}%)
+• Momentum Regime: ${regimeContext.momentumRegime}
+
+VOLATILITY METRICS:
+• ATR Normalized: ${regimeContext.volatilityMetrics.atrNormalized.toFixed(2)}%
+• Volatility Percentile: ${regimeContext.volatilityMetrics.volatilityPercentile.toFixed(0)}th percentile
+• Volatility Clustering: ${regimeContext.volatilityMetrics.isVolatilityCluster ? 'DETECTED' : 'NONE'}
+
+TREND METRICS:
+• ADX: ${regimeContext.trendMetrics.adx.toFixed(1)} (${regimeContext.trendMetrics.trendStrength})
+• Direction: ${regimeContext.trendMetrics.direction}
+• Consistency: ${regimeContext.trendMetrics.consistency.toFixed(0)}%
+• Trend Age: ${regimeContext.trendMetrics.trendAge} periods
+
+ANALYSIS ADJUSTMENTS:
+• Risk Multiplier: ${regimeContext.analysisAdjustments.riskMultiplier.toFixed(2)}x
+• Stop Loss Adjustment: ${regimeContext.analysisAdjustments.stopLossAdjustment.toFixed(2)}x
+• Take Profit Adjustment: ${regimeContext.analysisAdjustments.takeProfitAdjustment.toFixed(2)}x
+• Entry Approach: ${regimeContext.analysisAdjustments.entryApproach}
+• Timeframe Bias: ${regimeContext.analysisAdjustments.timeframeBias}
+
+REGIME INSIGHTS:
+${regimeContext.warnings.length > 0 ? `⚠️ Warnings: ${regimeContext.warnings.join('; ')}` : ''}
+${regimeContext.opportunities.length > 0 ? `💡 Opportunities: ${regimeContext.opportunities.join('; ')}` : ''}
+
+REGIME STABILITY: ${regimeContext.stability}% | Time in Current Regime: ${regimeContext.regimeHistory.timeInCurrentRegime.toFixed(1)} hours
+`;
+}
 
 // Helper function for reliable Gemini API calls with retry and timeout
 async function makeGeminiRequest(
@@ -496,16 +566,24 @@ const advancedPatternAnalysisResultSchema = {
 };
 
 
-const SYSTEM_INSTRUCTION = `You are Wizz, an elite crypto chart analyst. Your analysis must be precise, quantitative, and strictly confined to the visual data in the chart. Your goal is reproducibility and self-awareness.
+const SYSTEM_INSTRUCTION = `You are Wizz, an elite crypto chart analyst with advanced market regime detection capabilities. Your analysis must be precise, quantitative, and strictly confined to the visual data in the chart. Your goal is reproducibility and self-awareness with context-aware market regime adjustments.
 
-First, perform a rigorous 7-step analysis process.
+MARKET REGIME CONTEXT will be provided to enhance your analysis with:
+- Current volatility regime (LOW/NORMAL/HIGH/EXTREME)
+- Trend regime (STRONG_BULL/WEAK_BULL/NEUTRAL/WEAK_BEAR/STRONG_BEAR)
+- Direction regime (TRENDING/RANGING/TRANSITIONAL)
+- Momentum regime (ACCELERATING/DECELERATING/STABLE/CHOPPY)
+- Analysis adjustments (risk multipliers, stop/target adjustments, entry approach)
+
+First, perform a rigorous 8-step analysis process.
 1.  **Identify Timeframe:** State the chart's timeframe.
-2.  **Identify Key Levels:** Quantify major support and resistance levels.
-3.  **Analyze Chart Patterns:** Name any identified classic patterns and their implications.
-4.  **Examine Indicators:** For each visible indicator, state its value and implication.
-5.  **Assess Volume:** Describe the volume and correlate it with price action.
-6.  **Synthesize Findings:** Briefly summarize the confluence of factors.
-7.  **Verification & Confidence Score:** Critically review your own analysis from steps 1-6. Note any conflicting signals, weaknesses, or reasons for caution. Based on this self-critique, provide a final numerical 'overallConfidenceScore' from 0 (no confidence) to 100 (perfect confidence).
+2.  **Market Regime Assessment:** Incorporate the provided market regime context into your analysis.
+3.  **Identify Key Levels:** Quantify major support and resistance levels, adjusted for current volatility regime.
+4.  **Analyze Chart Patterns:** Name any identified classic patterns and their implications, considering regime context.
+5.  **Examine Indicators:** For each visible indicator, state its value and implication with regime-aware interpretation.
+6.  **Assess Volume:** Describe the volume and correlate it with price action.
+7.  **Synthesize Findings:** Briefly summarize the confluence of factors including regime considerations.
+8.  **Verification & Confidence Score:** Critically review your own analysis from steps 1-7. Note any conflicting signals, weaknesses, or reasons for caution. Based on this self-critique, provide a final numerical 'overallConfidenceScore' from 0 (no confidence) to 100 (perfect confidence).
 
 Then, run an Ensemble Strategy Confluence pass to improve signal quality:
 - Build an "Ensemble Matrix" of at least these strategies visible from the chart: Trend-Following (market structure/MAs), Breakout/Range, Mean Reversion (RSI/MFI), Momentum Divergence (RSI/MACD), Liquidity/SMC (OB/FVG/equal highs-lows/sweeps), and Volume Confirmation.
@@ -1142,6 +1220,21 @@ export async function* analyzeChartStream(history: ChatMessage[], prompt: string
     ];
 
     const hasImages = Array.isArray(images) && images.length > 0;
+
+    // Perform market regime detection for image analysis
+    let regimeContext: MarketRegimeContext | null = null;
+    if (hasImages) {
+        try {
+            const { prices, volumes } = generateMockPriceData(prompt);
+            regimeContext = await regimeDetectionService.detectMarketRegime(prices, volumes, '1H');
+            
+            // Add regime context to the current user prompt
+            const regimeContextText = formatRegimeContext(regimeContext);
+            currentUserParts[0].text = `${currentUserParts[0].text}\n\n${regimeContextText}`;
+        } catch (error) {
+            console.warn('Regime detection failed, proceeding without regime context:', error);
+        }
+    }
 
     const modelConfig = hasImages
         ? { // Analysis config for chart images

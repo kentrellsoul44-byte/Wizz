@@ -1,7 +1,8 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import type { ChatMessage, ImageData, AnalysisResult, MessageContent, TimeframeImageData, ProgressiveStreamEvent } from '../types';
+import type { ChatMessage, ImageData, AnalysisResult, MessageContent, TimeframeImageData, ProgressiveStreamEvent, MarketRegimeContext } from '../types';
 import { ChatInput } from './ChatInput';
 import { Message } from './Message';
+import { MarketRegimeDisplay } from './MarketRegimeDisplay';
 import { analyzeChartStream, analyzeMultiTimeframeStream, analyzeSMCStream, analyzeAdvancedPatternsStream } from '../services/geminiService';
 import { progressiveAnalysis } from '../services/progressiveAnalysisService';
 import { useSession } from '../contexts/SessionContext';
@@ -10,6 +11,7 @@ import { buildCacheKey } from '../services/determinismService';
 import { getCache, setCache } from '../services/cacheService';
 import { intelligentCache } from '../services/intelligentCacheService';
 import { applyPostProcessingGates } from '../services/postProcessingService';
+import { MarketRegimeDetectionService } from '../services/marketRegimeDetectionService';
 
 function sanitizeJsonResponse(text: string): string {
   const input = (text ?? '').trim();
@@ -34,12 +36,59 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode, defaultQui
   const [initialPrompt, setInitialPrompt] = useState<{key: number, text: string}>({key: 0, text: ''});
   const [isUltraMode, setIsUltraMode] = useState(defaultUltraMode);
   const [isQuickProfitMode, setIsQuickProfitMode] = useState(defaultQuickProfitMode);
+  const [currentMarketRegime, setCurrentMarketRegime] = useState<MarketRegimeContext | null>(null);
+  const [showRegimeDisplay, setShowRegimeDisplay] = useState(true);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const regimeDetectionServiceRef = useRef<MarketRegimeDetectionService>(new MarketRegimeDetectionService());
 
   useEffect(() => {
     chatContainerRef.current?.scrollTo(0, chatContainerRef.current.scrollHeight);
   }, [activeSession?.messages]);
+
+  // Helper function to generate mock market data and update regime
+  const updateMarketRegime = useCallback(async (prompt: string, hasImages: boolean) => {
+    if (!hasImages) return; // Only update regime for chart analysis
+    
+    try {
+      // Generate mock price data based on the prompt context
+      const generateMockData = (prompt: string) => {
+        const basePrice = 45000 + Math.random() * 20000; // Random base price between 45k-65k
+        const periods = 100;
+        const prices: number[] = [];
+        const volumes: number[] = [];
+        
+        // Add bias based on prompt content
+        const bullishBias = prompt.toLowerCase().includes('bull') || prompt.toLowerCase().includes('up') ? 0.002 : 0;
+        const bearishBias = prompt.toLowerCase().includes('bear') || prompt.toLowerCase().includes('down') ? -0.002 : 0;
+        const volatilityMultiplier = prompt.toLowerCase().includes('volatile') || prompt.toLowerCase().includes('extreme') ? 2 : 1;
+        
+        let currentPrice = basePrice;
+        for (let i = 0; i < periods; i++) {
+          const volatility = (0.015 * volatilityMultiplier) + (Math.random() * 0.01);
+          const trendBias = bullishBias + bearishBias;
+          const change = (Math.random() - 0.5) * volatility + trendBias;
+          
+          currentPrice = currentPrice * (1 + change);
+          prices.push(currentPrice);
+          
+          // Generate volume with some correlation to price movement
+          const baseVolume = 1000000;
+          const volumeMultiplier = 0.5 + Math.random() * 1.5; // 50%-200% of base
+          const moveCorrelation = Math.abs(change) * 5; // Higher volume on bigger moves
+          volumes.push(baseVolume * volumeMultiplier * (1 + moveCorrelation));
+        }
+        
+        return { prices, volumes };
+      };
+
+      const { prices, volumes } = generateMockData(prompt);
+      const regimeContext = await regimeDetectionServiceRef.current.detectMarketRegime(prices, volumes, '1H');
+      setCurrentMarketRegime(regimeContext);
+    } catch (error) {
+      console.warn('Failed to update market regime:', error);
+    }
+  }, []);
 
   const handleStopGeneration = useCallback(() => {
     if (abortControllerRef.current) {
@@ -144,6 +193,10 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode, defaultQui
                     const gated = applyPostProcessingGates(parsedJson as AnalysisResult, isUltraMode);
                     finalContent = gated as AnalysisResult;
                     thinkingText = gated.thinkingProcess;
+                    
+                    // Update market regime after successful analysis
+                    updateMarketRegime(prompt, true);
+                    
                     // Cache with intelligent cache system
                     if (imageHashes.length > 0) {
                       intelligentCache.cacheAnalysis(imageHashes, promptVersion, modelVersion, isUltraMode, 'STANDARD', gated);
@@ -440,6 +493,9 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode, defaultQui
                     const gated = applyPostProcessingGates(parsedJson as AnalysisResult, isUltraMode);
                     finalContent = gated as AnalysisResult;
                     thinkingText = gated.thinkingProcess;
+                    
+                    // Update market regime after successful SMC analysis
+                    updateMarketRegime(prompt, true);
                     
                     // Cache SMC analysis with intelligent cache
                     if (imageHashes.length > 0) {
@@ -959,39 +1015,76 @@ export const ChatView: React.FC<ChatViewProps> = ({ defaultUltraMode, defaultQui
   if (!activeSession) return null; // Should be handled by parent, but good practice
 
   return (
-    <div className="flex flex-1 flex-col bg-chat-bg overflow-hidden">
-      <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-6 space-y-6 scroll-smooth">
-        {activeSession.messages.length === 0 ? (
-           <EmptyChat onExampleClick={handleExamplePrompt} />
-        ) : (
-          activeSession.messages.map((message, index) => (
-            <Message 
-              key={message.id} 
-              message={message}
-              isLastMessage={index === activeSession.messages.length - 1}
-              isLoading={isLoading && index === activeSession.messages.length - 1 && message.role === 'assistant'}
-              onRegenerate={handleRegenerateResponse}
-            />
-          ))
-        )}
+    <div className="flex flex-1 bg-chat-bg overflow-hidden">
+      {/* Main Chat Area */}
+      <div className="flex flex-1 flex-col overflow-hidden">
+        <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-6 space-y-6 scroll-smooth">
+          {activeSession.messages.length === 0 ? (
+             <EmptyChat onExampleClick={handleExamplePrompt} />
+          ) : (
+            activeSession.messages.map((message, index) => (
+              <Message 
+                key={message.id} 
+                message={message}
+                isLastMessage={index === activeSession.messages.length - 1}
+                isLoading={isLoading && index === activeSession.messages.length - 1 && message.role === 'assistant'}
+                onRegenerate={handleRegenerateResponse}
+              />
+            ))
+          )}
+        </div>
+        <div className="px-6 pb-4 bg-chat-bg">
+          <ChatInput 
+              key={initialPrompt.key}
+              onSendMessage={handleSendMessage}
+              onSendMultiTimeframeMessage={handleSendMultiTimeframeMessage}
+              onSendSMCMessage={handleSendSMCMessage}
+              onSendAdvancedPatternMessage={handleSendAdvancedPatternMessage}
+              onSendProgressiveMessage={handleSendProgressiveMessage}
+              isLoading={isLoading} 
+              onStopGeneration={handleStopGeneration}
+              initialPrompt={initialPrompt.text}
+              isUltraMode={isUltraMode}
+              onToggleUltraMode={() => setIsUltraMode(prev => !prev)}
+              isQuickProfitMode={isQuickProfitMode}
+              onToggleQuickProfitMode={() => setIsQuickProfitMode(prev => !prev)}
+          />
+        </div>
       </div>
-      <div className="px-6 pb-4 bg-chat-bg">
-        <ChatInput 
-            key={initialPrompt.key}
-            onSendMessage={handleSendMessage}
-            onSendMultiTimeframeMessage={handleSendMultiTimeframeMessage}
-            onSendSMCMessage={handleSendSMCMessage}
-            onSendAdvancedPatternMessage={handleSendAdvancedPatternMessage}
-            onSendProgressiveMessage={handleSendProgressiveMessage}
-            isLoading={isLoading} 
-            onStopGeneration={handleStopGeneration}
-            initialPrompt={initialPrompt.text}
-            isUltraMode={isUltraMode}
-            onToggleUltraMode={() => setIsUltraMode(prev => !prev)}
-            isQuickProfitMode={isQuickProfitMode}
-            onToggleQuickProfitMode={() => setIsQuickProfitMode(prev => !prev)}
-        />
-      </div>
+
+      {/* Market Regime Sidebar */}
+      {showRegimeDisplay && (
+        <div className="w-80 border-l border-gray-700 bg-gray-800/30 overflow-y-auto">
+          <div className="p-4">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-white">Market Analysis</h2>
+              <button
+                onClick={() => setShowRegimeDisplay(false)}
+                className="text-gray-400 hover:text-white transition-colors"
+                aria-label="Hide regime display"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <MarketRegimeDisplay regimeContext={currentMarketRegime} />
+          </div>
+        </div>
+      )}
+
+      {/* Show Regime Button (when hidden) */}
+      {!showRegimeDisplay && (
+        <button
+          onClick={() => setShowRegimeDisplay(true)}
+          className="fixed top-4 right-4 bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-lg shadow-lg transition-colors z-10"
+          aria-label="Show market regime"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+          </svg>
+        </button>
+      )}
     </div>
   );
 }
