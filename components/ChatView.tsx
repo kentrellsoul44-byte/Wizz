@@ -21,26 +21,22 @@ function sanitizeJsonResponse(text: string): string {
   const fenced = input.match(/^```(?:json)?\s*([\s\S]*?)```\s*$/i);
   const body = (fenced ? fenced[1] : input).trim();
 
-  // Collect candidate JSON slices, prioritizing the most plausible near the end
+  // Prefer the last complete top-level JSON object in the stream
   const candidates: string[] = [];
-  const lastClose = body.lastIndexOf('}');
-  const firstOpen = body.indexOf('{');
-  if (firstOpen !== -1 && lastClose !== -1 && lastClose > firstOpen) {
-    candidates.push(body.slice(firstOpen, lastClose + 1));
-    // Also try a few alternative starts scanning backwards to catch the final object
-    let found = 0;
-    for (let i = lastClose; i >= 0 && found < 3; i--) {
-      if (body[i] === '{') {
-        candidates.push(body.slice(i, lastClose + 1));
-        found++;
-      }
-    }
-  } else if (firstOpen !== -1) {
-    // No closing brace found; take from first open and try to repair
-    candidates.push(body.slice(firstOpen));
+  const lastBlock = extractLastTopLevelJson(body);
+  if (lastBlock) {
+    candidates.push(lastBlock);
   } else {
-    // As-is body as a last resort
-    candidates.push(body);
+    // Fallback to naive slicing if we cannot structurally find a top-level block
+    const lastClose = body.lastIndexOf('}');
+    const firstOpen = body.indexOf('{');
+    if (firstOpen !== -1 && lastClose !== -1 && lastClose > firstOpen) {
+      candidates.push(body.slice(firstOpen, lastClose + 1));
+    } else if (firstOpen !== -1) {
+      candidates.push(body.slice(firstOpen));
+    } else {
+      candidates.push(body);
+    }
   }
 
   // Try to fix and validate each candidate
@@ -50,6 +46,45 @@ function sanitizeJsonResponse(text: string): string {
   }
 
   throw new Error('No valid JSON found in response');
+}
+
+function extractLastTopLevelJson(s: string): string | null {
+  let inString = false;
+  let escaping = false;
+  let depth = 0;
+  let lastStart = -1;
+  let lastEnd = -1;
+
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (inString) {
+      if (escaping) {
+        escaping = false;
+      } else if (ch === '\\') {
+        escaping = true;
+      } else if (ch === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = true;
+    } else if (ch === '{') {
+      if (depth === 0) lastStart = i;
+      depth++;
+    } else if (ch === '}') {
+      if (depth > 0) depth--;
+      if (depth === 0 && lastStart !== -1) {
+        lastEnd = i;
+      }
+    }
+  }
+
+  if (lastStart !== -1 && lastEnd !== -1 && lastEnd > lastStart) {
+    return s.slice(lastStart, lastEnd + 1);
+  }
+  return null;
 }
 
 function tryFixJson(raw: string): string | null {
