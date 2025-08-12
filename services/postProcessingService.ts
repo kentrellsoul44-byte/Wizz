@@ -4,12 +4,32 @@ import { TradeTrackingService } from "./tradeTrackingService";
 
 function parseRiskReward(ratio?: string): number | null {
   if (!ratio) return null;
-  // Expect formats like "2.5:1" or "3:1" (ignore spaces)
-  const cleaned = ratio.trim();
-  const match = cleaned.match(/^(\d+(?:\.\d+)?)[\s]*:[\s]*1$/);
-  if (!match) return null;
-  const value = parseFloat(match[1]);
-  return isNaN(value) ? null : value;
+  const cleaned = ratio.trim().toLowerCase().replace(/\s+/g, '');
+
+  // Accept forms like "2.5:1", "1:2.5" (invert), "2.5x", "rr=2.5", "r=2.5", "2.5"
+  // Prefer explicit X:1; if 1:X, invert to X.
+  let rr: number | null = null;
+
+  // X:1 or 1:X
+  const colon = cleaned.match(/^(\d+(?:\.\d+)?):(?:(\d+(?:\.\d+)?))$/);
+  if (colon) {
+    const a = parseFloat(colon[1]);
+    const b = parseFloat(colon[2]);
+    if (isFinite(a) && isFinite(b) && b > 0) {
+      rr = a / b;
+    }
+  }
+
+  // Xx or r= X
+  if (rr === null) {
+    const mult = cleaned.match(/^(?:rr=|r=)?(\d+(?:\.\d+)?)x?$/);
+    if (mult) {
+      const v = parseFloat(mult[1]);
+      if (isFinite(v)) rr = v;
+    }
+  }
+
+  return rr !== null && isFinite(rr) && rr > 0 ? rr : null;
 }
 
 function isValidTradeStructure(result: AnalysisResult): boolean {

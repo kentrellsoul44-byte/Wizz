@@ -505,22 +505,16 @@ export class TimeBasedStopAdjustmentService {
       { time: '15:00', impact: 'MEDIUM', type: 'ECB Decision' }
     ];
     
-    // Randomly add events (in real implementation, this would come from news feed)
-    if (Math.random() < 0.3) { // 30% chance of news event
-      const event = mockEvents[Math.floor(Math.random() * mockEvents.length)];
+    // Random news disabled by default to maintain determinism.
+    // Integrate a real calendar API to enable this feature.
+    if (false) {
+      const event = mockEvents[0];
       const eventTime = new Date(currentTime);
       eventTime.setHours(parseInt(event.time.split(':')[0]));
       eventTime.setMinutes(parseInt(event.time.split(':')[1]));
-      
       const timeToEvent = Math.floor((eventTime.getTime() - currentTime.getTime()) / (1000 * 60));
-      
-      if (timeToEvent > 0 && timeToEvent < 8 * 60) { // Within 8 hours
-        events.push({
-          upcoming: true,
-          timeToEvent,
-          impact: event.impact as 'LOW' | 'MEDIUM' | 'HIGH',
-          type: event.type
-        });
+      if (timeToEvent > 0 && timeToEvent < 8 * 60) {
+        events.push({ upcoming: true, timeToEvent, impact: event.impact as 'LOW' | 'MEDIUM' | 'HIGH', type: event.type });
       }
     }
     
