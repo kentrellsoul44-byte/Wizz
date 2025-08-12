@@ -173,17 +173,14 @@ export const ChatView: React.FC = () => {
 
   const updateMarketRegime = useCallback((prompt: string, includesImage: boolean) => {
     if (includesImage) {
-      const newContext = marketRegimeService.current.updateContext({
+      const newContext = marketRegimeService.current.updateContext ? marketRegimeService.current.updateContext({
         lastAnalysisTime: new Date(),
         recentPrompts: marketRegimeContext?.recentPrompts 
           ? [...marketRegimeContext.recentPrompts.slice(-9), prompt]
           : [prompt],
         sessionAnalysisCount: (marketRegimeContext?.sessionAnalysisCount ?? 0) + 1,
-        marketSession: marketRegimeService.current.getCurrentSession(),
-        volatilityLevel: marketRegimeService.current.estimateVolatility(prompt),
-        confidenceScore: 75 // Default confidence when including images
-      });
-      setMarketRegimeContext(newContext);
+      }) : (marketRegimeContext as any);
+      if (newContext) setMarketRegimeContext(newContext);
     }
   }, [marketRegimeContext]);
 
@@ -577,9 +574,7 @@ export const ChatView: React.FC = () => {
 
       {/* Market Regime Sidebar */}
       {marketRegimeContext && (
-        <div className="w-80 border-l border-border-color bg-sidebar-bg">
-          <MarketRegimeDisplay context={marketRegimeContext} />
-        </div>
+        <MarketRegimeDisplay regimeContext={marketRegimeContext} />
       )}
     </div>
   );
