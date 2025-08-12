@@ -4,6 +4,7 @@ import type { ChatMessage, ImageData, TimeframeImageData, MarketRegimeContext } 
 import { ConfidenceCalibrationService } from "./confidenceCalibrationService";
 import { MarketRegimeDetectionService } from "./marketRegimeDetectionService";
 import { applyPostProcessingGates } from './postProcessingService';
+import { MarketDataService, mapTimeframeToBinanceInterval, mapAssetToBinanceSymbol } from './marketDataService';
 
 const API_KEY = process.env.API_KEY || (process as any)?.env?.GEMINI_API_KEY;
 
@@ -1324,8 +1325,31 @@ export async function* analyzeChartStream(history: ChatMessage[], prompt: string
                         isUltraMode
                     );
 
-                    // Apply gating
-                    const gated = applyPostProcessingGates(analysisResult, isUltraMode);
+                    // Try to fetch real OHLCV if we can infer asset/timeframe
+                    let ohlcvBars: any[] | undefined;
+                    let assetOverride: string | undefined;
+                    let timeframeOverride: string | undefined;
+                    try {
+                        const summaryLower = String(analysisResult.summary || '').toLowerCase();
+                        // Heuristic asset detection
+                        if (summaryLower.includes('btc')) assetOverride = 'BTC';
+                        else if (summaryLower.includes('ethereum') || summaryLower.includes('eth')) assetOverride = 'ETH';
+                        // Use analysisResult.timeframe string if present
+                        if (analysisResult.timeframe) timeframeOverride = analysisResult.timeframe;
+                        const symbol = mapAssetToBinanceSymbol(assetOverride || 'BTC');
+                        const interval = mapTimeframeToBinanceInterval(timeframeOverride || '1H');
+                        const bars = await MarketDataService.fetchCryptoOHLCV({ symbol, interval, limit: 500 });
+                        ohlcvBars = bars;
+                    } catch (e) {
+                        console.warn('OHLCV fetch skipped:', e);
+                    }
+
+                    // Apply gating with OHLCV bars if available
+                    const gated = applyPostProcessingGates(analysisResult, isUltraMode, {
+                        ohlcvBars,
+                        assetOverride,
+                        timeframeOverride,
+                    });
                     
                     // Emit a single, final JSON
                     const updatedResponse = JSON.stringify(gated, null, 0);
@@ -1496,8 +1520,21 @@ export async function* analyzeSMCStream(
                 isUltraMode
             );
 
+            // Fetch OHLCV if possible
+            let ohlcvBars: any[] | undefined; let assetOverride: string | undefined; let timeframeOverride: string | undefined;
+            try {
+                const summaryLower = String(analysisResult.summary || '').toLowerCase();
+                if (summaryLower.includes('btc')) assetOverride = 'BTC';
+                else if (summaryLower.includes('ethereum') || summaryLower.includes('eth')) assetOverride = 'ETH';
+                if (analysisResult.timeframe) timeframeOverride = analysisResult.timeframe;
+                const symbol = mapAssetToBinanceSymbol(assetOverride || 'BTC');
+                const interval = mapTimeframeToBinanceInterval(timeframeOverride || '1H');
+                const bars = await MarketDataService.fetchCryptoOHLCV({ symbol, interval, limit: 500 });
+                ohlcvBars = bars;
+            } catch (e) { console.warn('OHLCV fetch skipped:', e); }
+
             // Apply gating
-            const gated = applyPostProcessingGates(analysisResult, isUltraMode);
+            const gated = applyPostProcessingGates(analysisResult, isUltraMode, { ohlcvBars, assetOverride, timeframeOverride });
 
             yield JSON.stringify(gated, null, 0);
         }
@@ -1648,8 +1685,21 @@ export async function* analyzeAdvancedPatternsStream(
                 isUltraMode
             );
 
+            // Fetch OHLCV if possible
+            let ohlcvBars: any[] | undefined; let assetOverride: string | undefined; let timeframeOverride: string | undefined;
+            try {
+                const summaryLower = String(analysisResult.summary || '').toLowerCase();
+                if (summaryLower.includes('btc')) assetOverride = 'BTC';
+                else if (summaryLower.includes('ethereum') || summaryLower.includes('eth')) assetOverride = 'ETH';
+                if (analysisResult.timeframe) timeframeOverride = analysisResult.timeframe;
+                const symbol = mapAssetToBinanceSymbol(assetOverride || 'BTC');
+                const interval = mapTimeframeToBinanceInterval(timeframeOverride || '1H');
+                const bars = await MarketDataService.fetchCryptoOHLCV({ symbol, interval, limit: 500 });
+                ohlcvBars = bars;
+            } catch (e) { console.warn('OHLCV fetch skipped:', e); }
+
             // Apply gating
-            const gated = applyPostProcessingGates(analysisResult, isUltraMode);
+            const gated = applyPostProcessingGates(analysisResult, isUltraMode, { ohlcvBars, assetOverride, timeframeOverride });
 
             yield JSON.stringify(gated, null, 0);
         }

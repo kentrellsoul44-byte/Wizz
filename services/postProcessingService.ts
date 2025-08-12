@@ -1,6 +1,9 @@
 import type { AnalysisResult } from "../types";
 import { DynamicRiskRewardService } from "./dynamicRiskRewardService";
 import { TradeTrackingService } from "./tradeTrackingService";
+import { SupportResistanceAnalysisService } from './supportResistanceAnalysisService';
+import { LiquidityPoolDetectionService } from './liquidityPoolDetectionService';
+import { MarketRegimeDetectionService } from './marketRegimeDetectionService';
 
 function parseRiskReward(ratio?: string): number | null {
   if (!ratio) return null;
@@ -47,7 +50,13 @@ function isValidTradeStructure(result: AnalysisResult): boolean {
   return true;
 }
 
-export function applyPostProcessingGates(result: AnalysisResult, isUltraMode: boolean): AnalysisResult {
+export interface ApplyGatesOptions {
+  ohlcvBars?: Array<{ timestamp: string; open: number; high: number; low: number; close: number; volume: number }>;
+  assetOverride?: string; // e.g., BTC
+  timeframeOverride?: string; // e.g., 1H
+}
+
+export function applyPostProcessingGates(result: AnalysisResult, isUltraMode: boolean, options?: ApplyGatesOptions): AnalysisResult {
   const gated: AnalysisResult = { ...result };
 
   // Ensure confidence aligns with score per schema guidance
@@ -60,11 +69,11 @@ export function applyPostProcessingGates(result: AnalysisResult, isUltraMode: bo
   const rr = parseRiskReward(result.riskRewardRatio);
   const hasValidTrade = isValidTradeStructure(result);
 
-  // Get dynamic risk/reward requirements
+  // Get dynamic risk/reward requirements (with real OHLCV if provided)
   const dynamicRRService = DynamicRiskRewardService.getInstance();
   const tradeTrackingService = TradeTrackingService.getInstance();
-  const assetType = extractAssetType(result); // Extract from analysis context
-  const timeframe = (result.timeframe as any) || '1H'; // Default to 1H if not specified
+  const assetType = options?.assetOverride || extractAssetType(result); // Extract from analysis context
+  const timeframe = (options?.timeframeOverride as any) || (result.timeframe as any) || '1H'; // Default to 1H if not specified
   const timestamp = new Date().toISOString();
   
   // Calculate dynamic R:R requirements
@@ -75,8 +84,80 @@ export function applyPostProcessingGates(result: AnalysisResult, isUltraMode: bo
     timeframe,
     timestamp,
     dynamicRRService,
-    tradeTrackingService
+    tradeTrackingService,
+    options?.ohlcvBars
   );
+
+  // Optional: structure and liquidity sanity checks using OHLCV
+  let requiredMinRRNormal = dynamicRR.normalMode.minRR;
+  let requiredMinRRUltra = dynamicRR.ultraMode.minRR;
+  if (options?.ohlcvBars && options.ohlcvBars.length > 0 && hasValidTrade) {
+    try {
+      const bars = options.ohlcvBars;
+      const currentPrice = bars[bars.length - 1].close;
+      const srService = SupportResistanceAnalysisService.getInstance();
+      const liqService = LiquidityPoolDetectionService.getInstance();
+      const regimeService = new MarketRegimeDetectionService();
+
+      const entry = parseFloat(String(result.trade!.entryPrice).replace(/[^0-9.+-]/g, ""));
+      const stop = parseFloat(String(result.trade!.stopLoss).replace(/[^0-9.+-]/g, ""));
+
+      // Build priceData for S/R and Liquidity
+      const priceData = bars.map(b => ({ timestamp: b.timestamp, open: b.open, high: b.high, low: b.low, close: b.close, volume: b.volume }));
+      const srLevels = srService.identifySupportResistanceLevels(priceData, currentPrice, timeframe as any);
+      const pools = liqService.detectLiquidityPools(priceData, currentPrice, timeframe as any);
+
+      // Simple structural rule: SL must be beyond nearest structural level
+      const buffer = currentPrice * 0.0005; // 5 bps
+      let structureOK = true;
+      if (gated.signal === 'BUY') {
+        const supports = srLevels.filter(l => l.type === 'SUPPORT' && l.price < entry).sort((a, b) => Math.abs(b.price - entry) - Math.abs(a.price - entry));
+        const nearestSupport = supports[0];
+        if (nearestSupport) {
+          if (!(stop <= (nearestSupport.price - buffer))) structureOK = false;
+        } else {
+          // No identified support; at least require stop < entry by buffer
+          if (!(stop < entry - buffer)) structureOK = false;
+        }
+      } else if (gated.signal === 'SELL') {
+        const resistances = srLevels.filter(l => l.type === 'RESISTANCE' && l.price > entry).sort((a, b) => Math.abs(b.price - entry) - Math.abs(a.price - entry));
+        const nearestResistance = resistances[0];
+        if (nearestResistance) {
+          if (!(stop >= (nearestResistance.price + buffer))) structureOK = false;
+        } else {
+          if (!(stop > entry + buffer)) structureOK = false;
+        }
+      }
+
+      // Liquidity avoidance: SL should not lie inside an avoidance zone
+      let liquidityOK = true;
+      for (const p of pools) {
+        if (stop >= p.avoidanceZone.lower && stop <= p.avoidanceZone.upper) {
+          liquidityOK = false;
+          break;
+        }
+      }
+
+      // Regime tightening: if extreme volatility, raise min RR slightly
+      const prices = bars.map(b => b.close);
+      const volumes = bars.map(b => b.volume);
+      const regime = await regimeService.detectMarketRegime(prices, volumes, timeframe as any);
+      if (regime.volatilityRegime === 'EXTREME') {
+        requiredMinRRNormal += 0.2;
+        requiredMinRRUltra += 0.2;
+      }
+
+      if (!structureOK || !liquidityOK) {
+        // Fail closed if structure/liquidity invalid
+        gated.signal = 'NEUTRAL';
+        gated.trade = null;
+        gated.riskRewardRatio = null as any;
+        return gated;
+      }
+    } catch (e) {
+      console.warn('S/R or liquidity or regime checks failed:', e);
+    }
+  }
 
   // SMC-specific gating
   if (result.hasSMCAnalysis && result.smcAnalysis) {
@@ -85,7 +166,7 @@ export function applyPostProcessingGates(result: AnalysisResult, isUltraMode: bo
     if (isUltraMode) {
       // Ultra SMC: Maximum precision requirements
       const minScoreForTrade = 85;
-      const minRR = dynamicRR.ultraMode.minRR; // Dynamic R:R for Ultra SMC
+      const minRR = requiredMinRRUltra; // adjusted
       const minSMCConfidence = 80;
 
       if (gated.signal === "NEUTRAL" || gated.confidence === "LOW") {
@@ -105,7 +186,7 @@ export function applyPostProcessingGates(result: AnalysisResult, isUltraMode: bo
     } else {
       // Normal SMC mode
       const minScoreForTrade = 75;
-      const minRR = dynamicRR.normalMode.minRR; // Dynamic R:R for Normal SMC
+      const minRR = requiredMinRRNormal; // adjusted
       const minSMCConfidence = 70;
 
       if (gated.signal === "NEUTRAL" || gated.confidence === "LOW") {
@@ -132,7 +213,7 @@ export function applyPostProcessingGates(result: AnalysisResult, isUltraMode: bo
     if (isUltraMode) {
       // Ultra Pattern: Maximum precision requirements
       const minScoreForTrade = 85;
-      const minRR = dynamicRR.ultraMode.minRR; // Dynamic R:R for Ultra Pattern trades
+      const minRR = requiredMinRRUltra; // adjusted
       const minPatternConfidence = 85;
 
       if (gated.signal === "NEUTRAL" || gated.confidence === "LOW") {
@@ -152,7 +233,7 @@ export function applyPostProcessingGates(result: AnalysisResult, isUltraMode: bo
     } else {
       // Normal Pattern mode
       const minScoreForTrade = 75;
-      const minRR = dynamicRR.normalMode.minRR; // Dynamic R:R for Normal Pattern trades
+      const minRR = requiredMinRRNormal; // adjusted
       const minPatternConfidence = 75;
 
       if (gated.signal === "NEUTRAL" || gated.confidence === "LOW") {
@@ -179,7 +260,7 @@ export function applyPostProcessingGates(result: AnalysisResult, isUltraMode: bo
     if (isUltraMode) {
       // Ultra multi-timeframe: Even stricter requirements
       const minScoreForTrade = 85;
-      const minRR = dynamicRR.ultraMode.minRR; // Dynamic R:R for Ultra multi-timeframe
+      const minRR = requiredMinRRUltra; // adjusted
       const minConfluence = 80;
 
       if (gated.signal === "NEUTRAL" || gated.confidence === "LOW") {
@@ -199,7 +280,7 @@ export function applyPostProcessingGates(result: AnalysisResult, isUltraMode: bo
     } else {
       // Normal multi-timeframe mode
       const minScoreForTrade = 75;
-      const minRR = dynamicRR.normalMode.minRR; // Dynamic R:R for Normal multi-timeframe
+      const minRR = requiredMinRRNormal; // adjusted
       const minConfluence = 70;
 
       if (gated.signal === "NEUTRAL" || gated.confidence === "LOW") {
@@ -223,7 +304,7 @@ export function applyPostProcessingGates(result: AnalysisResult, isUltraMode: bo
   if (isUltraMode) {
     // Ultra: 2x stricter
     const minScoreForTrade = 85;
-    const minRR = dynamicRR.ultraMode.minRR; // Dynamic R:R for Ultra mode
+    const minRR = requiredMinRRUltra; // adjusted
 
     if (gated.signal === "NEUTRAL" || gated.confidence === "LOW") {
       gated.trade = null;
@@ -243,7 +324,7 @@ export function applyPostProcessingGates(result: AnalysisResult, isUltraMode: bo
   } else {
     // Normal mode gates
     const minScoreForTrade = 75;
-    const minRR = dynamicRR.normalMode.minRR; // Dynamic R:R for Normal mode
+    const minRR = requiredMinRRNormal; // adjusted
 
     if (gated.signal === "NEUTRAL" || gated.confidence === "LOW") {
       gated.trade = null;
@@ -294,7 +375,8 @@ function calculateDynamicRRRequirements(
   timeframe: string,
   timestamp: string,
   dynamicRRService: DynamicRiskRewardService,
-  tradeTrackingService: TradeTrackingService
+  tradeTrackingService: TradeTrackingService,
+  ohlcvBars?: Array<{ timestamp: string; open: number; high: number; low: number; close: number; volume: number }>
 ): { normalMode: { minRR: number; optimalRR: number; maxRR: number }; ultraMode: { minRR: number; optimalRR: number; maxRR: number } } {
   // Get base R:R requirements based on mode
   const baseRR = isUltraMode ? 2.2 : 1.8;
@@ -302,8 +384,12 @@ function calculateDynamicRRRequirements(
   // Get asset profile
   const assetProfile = dynamicRRService.getAssetProfile(assetType);
   
-  // Calculate volatility metrics (simplified - in practice, this would use actual price data)
-  const volatilityMetrics = dynamicRRService.calculateVolatilityMetrics([], timeframe as any);
+  // Calculate volatility metrics using real OHLCV if provided
+  const volatilityMetrics = (ohlcvBars && ohlcvBars.length > 0)
+    ? dynamicRRService.calculateVolatilityMetrics(
+        ohlcvBars.map(b => ({ high: b.high, low: b.low, close: b.close, timestamp: b.timestamp })),
+        timeframe as any)
+    : dynamicRRService.calculateVolatilityMetrics([], timeframe as any);
   
   // Analyze time patterns
   const timePatterns = dynamicRRService.analyzeTimePatterns(timestamp, assetType);
