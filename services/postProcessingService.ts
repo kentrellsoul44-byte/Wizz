@@ -56,7 +56,7 @@ export interface ApplyGatesOptions {
   timeframeOverride?: string; // e.g., 1H
 }
 
-export function applyPostProcessingGates(result: AnalysisResult, isUltraMode: boolean, options?: ApplyGatesOptions): AnalysisResult {
+export async function applyPostProcessingGates(result: AnalysisResult, isUltraMode: boolean, options?: ApplyGatesOptions): Promise<AnalysisResult> {
   const gated: AnalysisResult = { ...result };
 
   // Ensure confidence aligns with score per schema guidance

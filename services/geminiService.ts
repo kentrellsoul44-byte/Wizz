@@ -1345,7 +1345,7 @@ export async function* analyzeChartStream(history: ChatMessage[], prompt: string
                     }
 
                     // Apply gating with OHLCV bars if available
-                    const gated = applyPostProcessingGates(analysisResult, isUltraMode, {
+                    const gated = await applyPostProcessingGates(analysisResult, isUltraMode, {
                         ohlcvBars,
                         assetOverride,
                         timeframeOverride,
@@ -1534,7 +1534,7 @@ export async function* analyzeSMCStream(
             } catch (e) { console.warn('OHLCV fetch skipped:', e); }
 
             // Apply gating
-            const gated = applyPostProcessingGates(analysisResult, isUltraMode, { ohlcvBars, assetOverride, timeframeOverride });
+            const gated = await applyPostProcessingGates(analysisResult, isUltraMode, { ohlcvBars, assetOverride, timeframeOverride });
 
             yield JSON.stringify(gated, null, 0);
         }
@@ -1699,7 +1699,7 @@ export async function* analyzeAdvancedPatternsStream(
             } catch (e) { console.warn('OHLCV fetch skipped:', e); }
 
             // Apply gating
-            const gated = applyPostProcessingGates(analysisResult, isUltraMode, { ohlcvBars, assetOverride, timeframeOverride });
+            const gated = await applyPostProcessingGates(analysisResult, isUltraMode, { ohlcvBars, assetOverride, timeframeOverride });
 
             yield JSON.stringify(gated, null, 0);
         }
