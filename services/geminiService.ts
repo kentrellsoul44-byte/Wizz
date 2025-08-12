@@ -3,11 +3,12 @@ import type { ChatMessage, ImageData, TimeframeImageData, MarketRegimeContext } 
 
 import { ConfidenceCalibrationService } from "./confidenceCalibrationService";
 import { MarketRegimeDetectionService } from "./marketRegimeDetectionService";
+import { applyPostProcessingGates } from './postProcessingService';
 
-const API_KEY = process.env.API_KEY;
+const API_KEY = process.env.API_KEY || (process as any)?.env?.GEMINI_API_KEY;
 
 if (!API_KEY) {
-  throw new Error("API_KEY environment variable not set");
+  throw new Error("API_KEY (or GEMINI_API_KEY) environment variable not set");
 }
 
 const ai = new GoogleGenAI({ apiKey: API_KEY });
@@ -1135,6 +1136,7 @@ export async function* analyzeMultiTimeframeStream(
             modelConfig as any
         );
         
+        let fullResponse = '';
         for await (const chunk of responseStream) {
             if (signal.aborted) {
                 console.log('Multi-timeframe stream generation aborted by user.');
@@ -1142,8 +1144,32 @@ export async function* analyzeMultiTimeframeStream(
             }
             const textChunk = (chunk as any)?.text;
             if (typeof textChunk === 'string' && textChunk.length > 0) {
-                yield textChunk;
+                fullResponse += textChunk;
             }
+        }
+
+        if (fullResponse.trim()) {
+            const sanitizedResponse = sanitizeJsonResponse(fullResponse);
+            const analysisResult = JSON.parse(sanitizedResponse);
+
+            // Apply enhanced confidence calibration
+            const calibratedConfidence = ConfidenceCalibrationService.calibrateConfidence(
+                analysisResult, 
+                isUltraMode
+            );
+            analysisResult.calibratedConfidence = calibratedConfidence;
+            analysisResult.hasEnhancedConfidence = true;
+            analysisResult.overallConfidenceScore = calibratedConfidence.overallScore;
+            analysisResult.confidence = ConfidenceCalibrationService.getConfidenceLevel(
+                calibratedConfidence, 
+                isUltraMode
+            );
+
+            // Apply post-processing gates (gating)
+            const gated = applyPostProcessingGates(analysisResult, isUltraMode);
+
+            const updatedResponse = JSON.stringify(gated, null, 0);
+            yield updatedResponse;
         }
 
     } catch (error) {
@@ -1224,14 +1250,10 @@ export async function* analyzeChartStream(history: ChatMessage[], prompt: string
     let regimeContext: MarketRegimeContext | null = null;
     if (hasImages) {
         try {
-            const { prices, volumes } = generateMockPriceData(prompt);
-            regimeContext = await regimeDetectionService.detectMarketRegime(prices, volumes, '1H');
-            
-            // Add regime context to the current user prompt
-            const regimeContextText = formatRegimeContext(regimeContext);
-            currentUserParts[0].text = `${currentUserParts[0].text}\n\n${regimeContextText}`;
+            // Skip mock regime injection; real OHLCV should be integrated in a future improvement.
+            // Keep regimeContext null to avoid biasing the model with synthetic data.
         } catch (error) {
-            console.warn('Regime detection failed, proceeding without regime context:', error);
+            console.warn('Regime detection skipped:', error);
         }
     }
 
@@ -1268,12 +1290,17 @@ export async function* analyzeChartStream(history: ChatMessage[], prompt: string
             }
             const textChunk = (chunk as any)?.text;
             if (typeof textChunk === 'string' && textChunk.length > 0) {
-                fullResponse += textChunk;
-                yield textChunk;
+                if (hasImages) {
+                    // Accumulate only; we will emit a single final gated JSON.
+                    fullResponse += textChunk;
+                } else {
+                    // Text-only mode: stream through as-is.
+                    yield textChunk;
+                }
             }
         }
 
-        // Process analysis result with confidence calibration and Quick Profit mode
+        // Process analysis result with confidence calibration and gating (images only)
         if (hasImages && fullResponse.trim()) {
             try {
                 const sanitizedResponse = sanitizeJsonResponse(fullResponse);
@@ -1296,16 +1323,16 @@ export async function* analyzeChartStream(history: ChatMessage[], prompt: string
                         calibratedConfidence, 
                         isUltraMode
                     );
-                    
 
+                    // Apply gating
+                    const gated = applyPostProcessingGates(analysisResult, isUltraMode);
                     
-                    // Yield the updated result
-                    const updatedResponse = JSON.stringify(analysisResult, null, 0);
-                    yield '\n' + updatedResponse;
+                    // Emit a single, final JSON
+                    const updatedResponse = JSON.stringify(gated, null, 0);
+                    yield updatedResponse;
                 }
             } catch (error) {
-                console.error('Error processing Quick Profit mode:', error);
-                // Continue without Quick Profit processing if there's an error
+                console.error('Error processing calibrated/gated result:', error);
             }
         }
 
@@ -1436,6 +1463,7 @@ export async function* analyzeSMCStream(
             modelConfig as any
         );
         
+        let fullResponse = '';
         for await (const chunk of responseStream) {
             if (signal.aborted) {
                 console.log('SMC stream generation aborted by user.');
@@ -1443,8 +1471,35 @@ export async function* analyzeSMCStream(
             }
             const textChunk = (chunk as any)?.text;
             if (typeof textChunk === 'string' && textChunk.length > 0) {
-                yield textChunk;
+                if (hasImages) {
+                    fullResponse += textChunk;
+                } else {
+                    yield textChunk;
+                }
             }
+        }
+
+        if (hasImages && fullResponse.trim()) {
+            const sanitizedResponse = sanitizeJsonResponse(fullResponse);
+            const analysisResult = JSON.parse(sanitizedResponse);
+
+            // Apply calibration
+            const calibratedConfidence = ConfidenceCalibrationService.calibrateConfidence(
+                analysisResult,
+                isUltraMode
+            );
+            analysisResult.calibratedConfidence = calibratedConfidence;
+            analysisResult.hasEnhancedConfidence = true;
+            analysisResult.overallConfidenceScore = calibratedConfidence.overallScore;
+            analysisResult.confidence = ConfidenceCalibrationService.getConfidenceLevel(
+                calibratedConfidence, 
+                isUltraMode
+            );
+
+            // Apply gating
+            const gated = applyPostProcessingGates(analysisResult, isUltraMode);
+
+            yield JSON.stringify(gated, null, 0);
         }
 
     } catch (error) {
@@ -1560,6 +1615,7 @@ export async function* analyzeAdvancedPatternsStream(
             modelConfig as any
         );
         
+        let fullResponse = '';
         for await (const chunk of responseStream) {
             if (signal.aborted) {
                 console.log('Advanced Pattern stream generation aborted by user.');
@@ -1567,8 +1623,35 @@ export async function* analyzeAdvancedPatternsStream(
             }
             const textChunk = (chunk as any)?.text;
             if (typeof textChunk === 'string' && textChunk.length > 0) {
-                yield textChunk;
+                if (hasImages) {
+                    fullResponse += textChunk;
+                } else {
+                    yield textChunk;
+                }
             }
+        }
+
+        if (hasImages && fullResponse.trim()) {
+            const sanitizedResponse = sanitizeJsonResponse(fullResponse);
+            const analysisResult = JSON.parse(sanitizedResponse);
+
+            // Apply calibration
+            const calibratedConfidence = ConfidenceCalibrationService.calibrateConfidence(
+                analysisResult,
+                isUltraMode
+            );
+            analysisResult.calibratedConfidence = calibratedConfidence;
+            analysisResult.hasEnhancedConfidence = true;
+            analysisResult.overallConfidenceScore = calibratedConfidence.overallScore;
+            analysisResult.confidence = ConfidenceCalibrationService.getConfidenceLevel(
+                calibratedConfidence, 
+                isUltraMode
+            );
+
+            // Apply gating
+            const gated = applyPostProcessingGates(analysisResult, isUltraMode);
+
+            yield JSON.stringify(gated, null, 0);
         }
 
     } catch (error) {
